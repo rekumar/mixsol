@@ -336,7 +336,7 @@ class Mixer:
                         rotation=rotation,
                         bbox=dict(boxstyle="round", fc=c),
                     )
-                plt.scatter(x, y, color=c, s=300, zorder=999, alpha=0.5)
+                plt.scatter(x, y, color=plt.cm.Set2(i), s=300, zorder=999, alpha=0.5)
                 plt.text(
                     x=x,
                     y=y,
@@ -371,22 +371,42 @@ class SolutionMaker:
                 solid_matrix[m, n] = p.components.get(c, 0)
         return solid_matrix, components
 
-    def _solution_to_vector(self, target: Solution, volume=1):
+    def _solution_to_vector(self, target: Solution, volume: float = 1):
         # organize target solution into a matrix of total mols desired of each component
         target_matrix = np.zeros((len(self.components),))
-        for m, c in enumerate(self.components):
-            if c in target.solute_dict:
-                target_matrix[m] = target.solute_dict[c] * target.molarity * volume
+        for m, component in enumerate(self.components):
+            if component in target.solute_dict:
+                target_matrix[m] = (
+                    target.solute_dict[component] * target.molarity * volume
+                )
         return target_matrix.T
 
-    def _calculate_mix(self, target, tolerance=1e-3):
-        x, err = nnls(self.matrix.T, target, maxiter=1e3)
-        x[x < 1e-10] = 0
-        if err > tolerance:
-            return np.nan
-        return x
+    def _filter_powders(self, target):
+        idx_to_use = list(range(self.matrix.shape[0]))
+        for component_idx in np.where(target == 0)[0]:
+            present_in_powder = np.where(self.matrix[:, component_idx] > 0)[0]
+            for powder_idx in present_in_powder:
+                idx_to_use.remove(powder_idx)
+        return idx_to_use
 
-    def get_weights(self, target: Solution, volume: float):
-        target_vector = self._solution_to_vector(target, volume)
-        mass_vector = self._calculate_mix(target_vector)
-        return {str(c): m for c, m in zip(self.powders, mass_vector) if m > 0}
+    def _calculate_mix(self, matrix, target, tolerance=1e-3):
+        x, err = nnls(matrix.T, target.T, maxiter=1e5)
+        # x[x < 1e-10] = 0
+        # if err > tolerance:
+        #     return np.nan
+        return x, err
+
+    def get_weights(self, target: Solution, volume: float, tolerance=1e-10):
+        target_vector = self._solution_to_vector(target=target, volume=volume)
+        usable_powder_indices = self._filter_powders(target_vector)
+        matrix = self.matrix[usable_powder_indices]
+        mass_vector, error = nnls(matrix.T, target_vector.T, maxiter=1e3)
+        if error > tolerance:
+            raise Exception(
+                f"Could not achieve target solution from given powders. Error={error}, tolerance was {tolerance}"
+            )
+        return {
+            str(self.powders[idx]): m
+            for idx, m in zip(usable_powder_indices, mass_vector)
+            if m > 0
+        }
