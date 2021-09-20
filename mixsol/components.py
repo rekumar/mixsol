@@ -49,9 +49,9 @@ class Solution:
     def __eq__(self, other):
         if isinstance(other, self.__class__):
             return (
-                self.solutes == other.solutes
+                self.solute_dict == other.solute_dict
                 and self.molarity == other.molarity
-                and self.solvent == other.solvent
+                and self.solvent_dict == other.solvent_dict
             )
         else:
             return False

@@ -1,77 +1,26 @@
 import numpy as np
 from scipy.optimize import nnls
 from mixsol.components import Solution, Powder
-from mixsol.helpers import *
+from mixsol.helpers import name_to_components, components_to_name, calculate_molar_mass
+from mixsol.digraph import DirectedGraph
 import itertools as itt
 import matplotlib.pyplot as plt
 
 
-class DirectedGraph:
-    def __init__(self, adjacency_matrix):
-        self.g = adjacency_matrix
-
-    def indegree(self, node):
-        return sum(self.g[node] > 0)
-
-    def children(self, node):
-        return [n for n, v in enumerate(self.g[:, node]) if v > 0]
-
-    def hierarchy(self, reverse=False):
-        hier = [h for h in self._hierarchy_iter()]
-        if reverse:
-            return hier[::-1]
-        else:
-            return hier
-
-    def _hierarchy_iter(self):
-        indegree_map = {}
-        zero_indegree = []
-        for node in range(self.g.shape[0]):
-            d = self.indegree(node)
-            if d > 0:
-                indegree_map[node] = d
-            else:
-                zero_indegree.append(node)
-
-        while zero_indegree:
-            this_generation = zero_indegree
-            zero_indegree = []
-            for node in this_generation:
-                for child in self.children(node):
-                    indegree_map[child] -= 1
-                    if indegree_map[child] == 0:
-                        zero_indegree.append(child)
-                        del indegree_map[child]
-            yield this_generation
-
-    def _normalize(self, adjacency_matrix):
-        v_in = adjacency_matrix.sum(axis=1)
-        selfidx = np.where(v_in == 0)[0]
-        v_in[selfidx] = 1
-        g_norm = adjacency_matrix / v_in[:, np.newaxis]
-        g_norm[selfidx, selfidx] = 1
-        return g_norm
-
-    def propagate_load(self, load):
-        if len(load) != self.g.shape[0]:
-            raise ValueError("load must have same number of elements as graph nodes!")
-        g_norm = self._normalize(self.g)
-
-        first_gen = self.hierarchy()[0]
-        for gen in self.hierarchy(reverse=True):
-            for node in gen:
-                needed = g_norm[node] * load[node]
-                if node in first_gen:
-                    load[node] = needed[node]
-                else:
-                    load = load + needed
-        return load
-
-
 class Mixer:
+    """class to calculate mixing paths from a set of stock solutions -> set of target solutions"""
+
     def __init__(self, stock_solutions: list, targets: dict = None):
+        """Initialize the stock solutions + target solutions
+
+        Args:
+            stock_solutions (list): list of Solution objects defining starting solutions
+            targets (dict, optional): dictionary of {Solution:volume} that define target solutions and volumes of each. Defaults to None.
+        """
         if targets is None:
             targets = {}
+        stock_matrix, _, stock_components = self._solutions_to_matrix(stock_solutions)
+
         self.target_solutions = list(targets.keys())
         self.solutions = list(set(stock_solutions + self.target_solutions))
         self.target_volumes = {
@@ -85,8 +34,9 @@ class Mixer:
         self.stock_idx = [
             self.solutions.index(stock) for stock in stock_solutions
         ]  # rows of solution matrix that belong to stock solutions
+        self.__solved = False
 
-    def _solutions_to_matrix(self, solutions: list, components: list = None):
+    def _solutions_to_matrix(self, solutions: list, components: list = None) -> tuple:
         """Converts a list of solutions into a matrix of molarity of each component in each solution
 
         Args:
@@ -94,9 +44,10 @@ class Mixer:
             components (list, optional): individual components that cover all solutions. If none, will generate this from the solution list
 
         Returns:
-            solution_matrix, solvent_idx, components
+            solution_matrix (np.ndarray):  rows are solutions, columns are components
+            solvent_idx (list): indices of columns that encode solvent components
+            components (list): components that cover all solutions (column key)
 
-            solution_matrix = rows are solutions, columns are components
 
         """
         if isinstance(solutions, Solution):
@@ -125,24 +76,53 @@ class Mixer:
 
         return solution_matrix, solvent_idx, components
 
-    def _solution_to_vector(self, target: Solution, volume=1):
+    def _solution_to_vector(
+        self,
+        target: Solution,
+        volume: float = 1,
+        components: list = None,
+    ) -> np.ndarray:
+        """Convert a Solution object into a vector of molarities. vector matches the component ordering of the solution matrix
+
+        Args:
+            target (Solution): Target solution
+            volume (float, optional): Volume of solution desired. Defaults to 1.
+            components (list, optional): Subset of components to construct vector around. If None (default), uses component list for solution matrix.
+
+        Returns:
+            np.ndarray: nx1 vector of molarities in order of components list
+        """
         # organize target solution into a matrix of total mols desired of each component
-        target_matrix = np.zeros((len(self.components),))
-        for m, c in enumerate(self.components):
+        if components is None:
+            components = self.components
+        target_matrix = np.zeros((len(components),))
+        for m, c in enumerate(components):
             if c in target.solute_dict:
                 target_matrix[m] = target.solute_dict[c] * target.molarity * volume
             elif c in target.solvent_dict:
                 target_matrix[m] = target.solvent_dict[c] * volume
         return target_matrix.T
 
-    def _is_plausible(self, solution_matrix, target_vector):
+    def _is_plausible(
+        self, solution_matrix: np.ndarray, target_vector: np.ndarray
+    ) -> bool:
         """Check if the solution_matrix spans target vector values. If not, no chance of a successful mixture here!"""
         difference = solution_matrix - target_vector
         return not any([all(v > 0) or all(v < 0) for v in difference.T])
 
     def _calculate_mix(
-        self, target, solution_indices: list = None, tolerance=1e-3, min_fraction=0
-    ):
+        self,
+        target: Solution,
+        solution_indices: list = None,
+        tolerance: float = 1e-3,
+        min_fraction: float = 0,
+    ) -> list:
+        """Calculate mixture of solution (solution matrix rows) that combine to achieve the target solution
+
+
+        Returns:
+            list: list of float values defining the volume of each solution to mix to form target
+        """
         if solution_indices is None:
             solution_indices = list(range(len(self.solutions)))
         A = self.solution_matrix[solution_indices]
@@ -150,7 +130,7 @@ class Mixer:
         if not self._is_plausible(A, b):
             return np.nan
         x, err = nnls(A.T, b, maxiter=1e3)
-        x[x < 1e-10] = 0
+        x.round(15)  # numerical solution has very tiny errors
         if err > tolerance:
             return np.nan
         if np.logical_and(x > 0, x < min_fraction).any():
@@ -163,14 +143,28 @@ class Mixer:
 
     def mix(
         self,
-        target,
-        volume,
-        solution_indices=None,
-        tolerance=1e-2,
-        min_volume=0,
-        verbose=False,
-        max_inputs=None,
-    ):
+        target: Solution,
+        volume: float,
+        solution_indices: list = None,
+        tolerance: float = 1e-2,
+        min_volume: float = 0,
+        verbose: bool = False,
+        max_inputs: int = None,
+    ) -> np.ndarray:
+        """Calculate mixture of stock solutions to achieve target solution
+
+        Args:
+            target (Solution): target solution
+            volume (float): volume of target solution desired
+            solution_indices (list, optional): list of solution (row) indices to consider for mixing. If None (default), assumes all solutions are valid.
+            tolerance (float, optional): error threhold for target solution. Defaults to 1e-2.
+            min_volume (float, optional): minimum volume that can be mixed from any single solution (useful for pipettes with a minimum aspiration volume). Defaults to 0.
+            verbose (bool, optional): if True, returns all plausible mixture vectors. If False (default), only returns the best (largest minimum single volume transfer) vector.
+            max_inputs (int, optional): maximum number of solutions to mix into the given target. Defaults to None (no limit).
+
+        Returns:
+            np.ndarray: vector of solution volumes corresponding to rows in the solution matrix (self.solutions). If verbose=True, this will be a list of such vectors that all reach the target solution
+        """
         min_fraction = min_volume / volume
         if solution_indices is None or solution_indices == "stock":
             solution_indices = self.stock_idx
@@ -199,7 +193,19 @@ class Mixer:
             return possible_mixtures * volume
         return possible_mixtures[0] * volume
 
-    def _solve_adjacency_matrix(self, min_volume, max_inputs, max_generations):
+    def _solve_adjacency_matrix(
+        self, min_volume: float, max_inputs: int, max_generations: int
+    ):
+        """solves the mixing plan for all target solutions. Other target solutions can act as stepping stones to a target (multiple mixing generations).
+
+        Args:
+            min_volume (float): minimum volume for single liquid transfer. useful for pipettes with a minimum aspiration volume
+            max_inputs (int): maximum number of solutions that can be mixed to achieve a target solution
+            max_generations (int): maximum generations/rounds of mixing that are allowed
+
+        Returns:
+            np.ndarray: adjacency matrix describing all volume transfers to achieve target solutions
+        """
         graph = np.zeros((len(self.solutions), len(self.solutions)))
         self.availableidx = self.stock_idx.copy()
         generation = 0
@@ -231,7 +237,16 @@ class Mixer:
             generation += 1
         return graph
 
-    def solve(self, min_volume, max_inputs=None, max_generations=np.inf):
+    def solve(
+        self, min_volume: float, max_inputs: int = None, max_generations: int = np.inf
+    ):
+        """user-facing method to solve mixing strategy for all target solutions
+
+        Args:
+            min_volume (float): minimum volume for single liquid transfer. useful for pipettes with a minimum aspiration volume
+            max_inputs (int): maximum number of solutions that can be mixed to achieve a target solution. Default is None.
+            max_generations (int): maximum generations/rounds of mixing that are allowed. Default is np.inf (ie no limit)
+        """
         if max_inputs is None:
             max_inputs = len(self.solutions) - 1
 
@@ -275,9 +290,16 @@ class Mixer:
             this_gen = {node: transfers[node] for node in gen if node in transfers}
             if len(this_gen) > 0:
                 self.transfers_per_generation.append(this_gen)
+        self.__solved = True
 
     ### publishing methods
+    def _check_if_solved(self):
+        if not self.__solved:
+            raise Exception("Solution mixing must be solved (using self.solve) first!")
+
     def print(self):
+        """Prints the pipetting instructions in proper order to console in plain english. Will substitute solution names with their .alias if present"""
+        self._check_if_solved()
         # for idx in self.stock_idx:
         #     volume_graph[idx, idx] = self.target_volumes.get(self.solutions[idx], 0)
         print("===== Stock Prep =====")
@@ -291,6 +313,8 @@ class Mixer:
                     print(f"\t{volume:.2f} to {destination}")
 
     def plot(self):
+        """Plots the pipetting instructions as a directed graph, layered by generation. Will substitute solution names with their .alias if present."""
+        self._check_if_solved()
         nodes = {}
         fig, ax = plt.subplots(figsize=(10, 10))
         ax.set_aspect("equal")
@@ -350,12 +374,30 @@ class Mixer:
         plt.tight_layout()
 
 
-class SolutionMaker:
+class Weigher:
+    """class to calculate weights of solute powders from a set of stock powders -> target solution of defined volume+molarity"""
+
     def __init__(self, powders: list):
+        """Initialize the powder matrix
+
+        Args:
+            powders (list): List of Powder objects available for solution preparation.
+        """
         self.powders = powders
         self.matrix, self.components = self._powders_to_matrix(powders)
 
-    def _powders_to_matrix(self, powders: list):
+    def _powders_to_matrix(self, powders: list) -> tuple:
+        """Converts a list of powders into a matrix of mol/g of each component in each solution
+
+        Args:
+            powders (list): Powder objects
+
+        Returns:
+            solid_matrix (np.ndarray):  rows are powders, columns are components
+            components (list): components that cover all powders (column key)
+
+
+        """
         # get possible solution components from stock list
         components = set()
         for p in powders:
@@ -371,7 +413,17 @@ class SolutionMaker:
                 solid_matrix[m, n] = p.components.get(c, 0)
         return solid_matrix, components
 
-    def _solution_to_vector(self, target: Solution, volume: float = 1):
+    def _solution_to_vector(self, target: Solution, volume: float = 1) -> np.ndarray:
+        """Convert a Solution object into a vector of molarities. vector matches the component ordering of the solution matrix
+
+        Args:
+            target (Solution): Target solution
+            volume (float, optional): Volume of solution desired. Defaults to 1.
+            components (list, optional): Subset of components to construct vector around. If None (default), uses component list for solution matrix.
+
+        Returns:
+            np.ndarray: nx1 vector of molarities in order of components list
+        """
         # organize target solution into a matrix of total mols desired of each component
         target_matrix = np.zeros((len(self.components),))
         for m, component in enumerate(self.components):
@@ -381,7 +433,15 @@ class SolutionMaker:
                 )
         return target_matrix.T
 
-    def _filter_powders(self, target):
+    def _filter_powders(self, target: Solution) -> list:
+        """Filter out powders with components that are not present in the target solution (these powders will never be valid inputs).
+
+        Args:
+            target (Solution): target solution
+
+        Returns:
+            list: row indices of powders that are valid options for the target solution
+        """
         idx_to_use = list(range(self.matrix.shape[0]))
         for component_idx in np.where(target == 0)[0]:
             present_in_powder = np.where(self.matrix[:, component_idx] > 0)[0]
@@ -389,18 +449,33 @@ class SolutionMaker:
                 idx_to_use.remove(powder_idx)
         return idx_to_use
 
-    def _calculate_mix(self, matrix, target, tolerance=1e-3):
-        x, err = nnls(matrix.T, target.T, maxiter=1e5)
-        # x[x < 1e-10] = 0
-        # if err > tolerance:
-        #     return np.nan
-        return x, err
+    def _lookup_powder(self, s: str):
+        for idx, p in enumerate(self.powders):
+            if p.alias == s or str(p) == s:
+                return idx
+        raise ValueError(f"Could not find powder {s} in this Weigher!")
 
-    def get_weights(self, target: Solution, volume: float, tolerance=1e-10):
+    def get_weights(
+        self, target: Solution, volume: float, tolerance: float = 1e-10
+    ) -> dict:
+        """calculate the weights of stock powders necessary to make a target Solution
+
+        Args:
+            target (Solution): target solution. molarity will be defined in the Solution object.
+            volume (float): volume (L) of solution to make
+            tolerance (float, optional): error in solution molarities to tolerate. This number is a bit arbitrary for now. Defaults to 1e-10.
+
+        Raises:
+            Exception: No plausible mix of weights to make this solution
+
+        Returns:
+            dict: dictionary of {powder:mass (g)} that should be dissolved to make the target solution.
+        """
         target_vector = self._solution_to_vector(target=target, volume=volume)
         usable_powder_indices = self._filter_powders(target_vector)
         matrix = self.matrix[usable_powder_indices]
         mass_vector, error = nnls(matrix.T, target_vector.T, maxiter=1e3)
+        mass_vector = mass_vector.round(15)
         if error > tolerance:  # TODO #1
             raise Exception(
                 f"Could not achieve target solution from given powders. Error={error}, tolerance was {tolerance}"
@@ -410,3 +485,32 @@ class SolutionMaker:
             for idx, m in zip(usable_powder_indices, mass_vector)
             if m > 0
         }
+
+    def weights_to_solution(
+        self, weights: dict, volume: float, solvent: str, norm=None
+    ) -> Solution:
+        """Returns a Solution object generated by mixing the powder weights and solvent
+
+        Args:
+            weights (dict): {powder:mass(g)} dictionary. Powders must be present in this `Weigher`, and can be referred to by the `Powder.alias` or `Powder.formula` attributes
+            volume (float): volume (L) of solvent powder is dispersed into
+            solvent (str): Formula string for the solvent. ie "IPA", "DMF9_DMSO1", "EtOH0.5_IPA0.5".
+            norm (str/float, optional): Value to normalize the molarities by. This can be a float value, or the name of a single component of the resulting `Solution`. Note that this only affects the string representation of the `Solution.solutes`.
+
+        Returns:
+            Solution: solution object resulting from the powder mixing
+        """
+        v = np.zeros(len(self.components))
+        for powder, mass in weights.items():
+            m = self._lookup_powder(powder)
+            v += (self.matrix[m] * mass).round(15)
+
+        if norm is None:
+            norm = v.max()
+        elif type(norm) == str:
+            norm = v[self.components.index(norm)]
+        v /= norm
+        solutes = components_to_name(
+            components={c: v for c, v in zip(self.components, v) if v > 0}
+        )
+        return Solution(solutes=solutes, solvent=solvent, molarity=norm / volume)

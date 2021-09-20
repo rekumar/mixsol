@@ -3,7 +3,16 @@ from molmass import Formula
 
 
 ## parsing formulae -> dictionaries
-def components_to_name(components, delimiter="_"):
+def components_to_name(components: dict, delimiter: str = "_") -> str:
+    """Convert a dictionary of components into a string
+
+    Args:
+        components (dict): {component(str):amount(float)}
+        delimiter (str, optional): will be inserted between each component. Defaults to "_".
+
+    Returns:
+        str: string of (component)(amount)(delimiter) repeat units
+    """
     composition_label = ""
     for c, n in components.items():
         if n == 0:
@@ -17,14 +26,22 @@ def components_to_name(components, delimiter="_"):
 
 
 def name_to_components(
-    name,
-    factor=1,
-    delimiter="_",
-):
+    name: str,
+    factor: float = 1,
+    delimiter: str = "_",
+) -> dict:
     """
     given a chemical formula, returns dictionary with individual components/amounts
     expected name format = 'MA0.5_FA0.5_Pb1_I2_Br1'.
     would return dictionary with keys ['MA, FA', 'Pb', 'I', 'Br'] and values [0.5,.05,1,2,1]*factor
+
+    Args:
+        name (str): formula string
+        factor (float): factor to multiply all amount values in the string by. Defaults to 1.
+        delimiter (str): indicator string to split the formula into components. Defaults to "_"
+
+    Returns:
+        dict: {component:amount}
     """
     components = {}
     for part in name.split(delimiter):
@@ -44,7 +61,19 @@ def name_to_components(
 
 
 ## getting molar mass - thanks @ molmass!
-def calculate_molar_mass(formula, delimiter="_"):
+def calculate_molar_mass(formula, delimiter="_") -> float:
+    """Given a formula string, try to get the molar mass using the molmass package
+
+    Args:
+        formula (str): chemical formula to get molar mass for
+        delimiter (str, optional): delimiter character/string to remove from formula, since molmass does not expect a delimiter. Defaults to "_".
+
+    Raises:
+        ValueError: molmass could not return a molar mass. Often this is because the formula contains non-elemental units (ie MA for methylammonium, which is actually C,N,and H's)
+
+    Returns:
+        float: molar mass (g/mol)
+    """
     try:
         return Formula(formula.replace(delimiter, "")).mass
     except:
