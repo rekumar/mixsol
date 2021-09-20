@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.optimize import nnls
-from mixsol.solution import Solution
+from mixsol.components import Solution, Powder
+from mixsol.helpers import *
 import itertools as itt
 import matplotlib.pyplot as plt
 
