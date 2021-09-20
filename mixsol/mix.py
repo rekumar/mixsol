@@ -401,7 +401,7 @@ class SolutionMaker:
         usable_powder_indices = self._filter_powders(target_vector)
         matrix = self.matrix[usable_powder_indices]
         mass_vector, error = nnls(matrix.T, target_vector.T, maxiter=1e3)
-        if error > tolerance:
+        if error > tolerance:  # TODO #1
             raise Exception(
                 f"Could not achieve target solution from given powders. Error={error}, tolerance was {tolerance}"
             )
