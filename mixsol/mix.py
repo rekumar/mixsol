@@ -146,7 +146,7 @@ class Mixer:
         target: Solution,
         volume: float,
         solution_indices: list = None,
-        tolerance: float = 1e-2,
+        tolerance: float = 1e-5,
         min_volume: float = 0,
         verbose: bool = False,
         max_inputs: int = None,
@@ -194,7 +194,7 @@ class Mixer:
         return possible_mixtures[0] * volume
 
     def _solve_adjacency_matrix(
-        self, min_volume: float, max_inputs: int, max_generations: int
+        self, min_volume: float, max_inputs: int, max_generations: int, tolerance: float
     ):
         """solves the mixing plan for all target solutions. Other target solutions can act as stepping stones to a target (multiple mixing generations).
 
@@ -229,6 +229,7 @@ class Mixer:
                     solution_indices=self.availableidx,
                     min_volume=min_volume,
                     max_inputs=max_inputs,
+                    tolerance=tolerance,
                 )
                 if not np.isnan(x).any():
                     graph[i, :] = x
@@ -238,7 +239,11 @@ class Mixer:
         return graph
 
     def solve(
-        self, min_volume: float, max_inputs: int = None, max_generations: int = np.inf
+        self,
+        min_volume: float,
+        max_inputs: int = None,
+        max_generations: int = np.inf,
+        tolerance: float = 1e-5,
     ):
         """user-facing method to solve mixing strategy for all target solutions
 
@@ -254,6 +259,7 @@ class Mixer:
             min_volume=min_volume,
             max_inputs=max_inputs,
             max_generations=max_generations,
+            tolerance=tolerance,
         )
         self.graph = DirectedGraph(adjacency_matrix)
         g_norm = self.graph._normalize(self.graph.g)
@@ -312,18 +318,20 @@ class Mixer:
                 for destination, volume in transfers.items():
                     print(f"\t{volume:.2f} to {destination}")
 
-    def plot(self):
+    def plot(self, ax=None):
         """Plots the pipetting instructions as a directed graph, layered by generation. Will substitute solution names with their .alias if present."""
         self._check_if_solved()
         nodes = {}
-        fig, ax = plt.subplots(figsize=(10, 10))
-        ax.set_aspect("equal")
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(10, 10))
+        plt.sca(ax)
+        # ax.set_aspect("equal")
         for i, gen in enumerate(self.mixing_order):
             xoff = 0.5 * (i % 2) + np.random.random() * 0.2
             for j, (node, sources) in enumerate(gen.items()):
                 if node not in nodes:
                     x = j * 1.25 + xoff * len(self.mixing_order)
-                    y = i
+                    y = i + np.random.random() * 0.2 - 0.1
                     c = plt.cm.Set2(i)
                     nodes[node] = (x, y, c)
                 else:

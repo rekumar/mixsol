@@ -3,18 +3,22 @@ from molmass import Formula
 
 
 ## parsing formulae -> dictionaries
-def components_to_name(components: dict, delimiter: str = "_") -> str:
+def components_to_name(
+    components: dict, delimiter: str = "_", factor: float = 1
+) -> str:
     """Convert a dictionary of components into a string
 
     Args:
         components (dict): {component(str):amount(float)}
         delimiter (str, optional): will be inserted between each component. Defaults to "_".
+        factor (float, optional): factor to multiply all amounts by. Defaults to 1
 
     Returns:
         str: string of (component)(amount)(delimiter) repeat units
     """
     composition_label = ""
-    for c, n in components.items():
+    for c, nraw in components.items():
+        n = nraw * factor
         if n == 0:
             continue
         elif n == 1:

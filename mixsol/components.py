@@ -1,4 +1,5 @@
 from mixsol.helpers import components_to_name, name_to_components, calculate_molar_mass
+import json
 
 
 class Solution:
@@ -13,28 +14,22 @@ class Solution:
             molarity = 1
 
         self.molarity = molarity
-        self.solute_dict = name_to_components(solutes, factor=molarity, delimiter="_")
-        self.solutes = components_to_name(self.solute_dict, delimiter="_")
+        self.solutes = solutes
+        self.solute_dict = name_to_components(solutes, delimiter="_", factor=molarity)
+        total_solute_amt = sum(self.solute_dict.values())
+        solute_dict_norm = {
+            k: v / total_solute_amt for k, v in self.solute_dict.items()
+        }  # normalize so total solute amount is 1.0. used for hashing/comparison to other Solution's
+        self.__solute_str_norm = json.dumps(solute_dict_norm, sort_keys=True)
+        self.solvent = solvent
         self.solvent_dict = name_to_components(solvent, factor=1, delimiter="_")
-        self.solvent = components_to_name(self.solvent_dict, delimiter="_")
+        # self.solvent = components_to_name(self.solvent_dict, delimiter="_")
         total_solvent_amt = sum(self.solvent_dict.values())
         self.solvent_dict = {
             k: v / total_solvent_amt for k, v in self.solvent_dict.items()
         }  # normalize so total solvent amount is 1.0
-
+        self.__solvent_str_norm = json.dumps(self.solvent_dict, sort_keys=True)
         self.alias = alias
-
-    def to_dict(self):
-        out = {
-            "solutes": self.solutes,
-            "molarity": self.molarity,
-            "solvent": self.solvent,
-            "well": self.well,
-        }
-        return out
-
-    def to_json(self):
-        return json.dumps(self.to_dict())
 
     def __str__(self):
         if self.alias is not None:
@@ -57,7 +52,7 @@ class Solution:
             return False
 
     def __key(self):
-        return (self.solutes, self.molarity, self.solvent)
+        return (self.__solvent_str_norm, self.molarity, self.__solute_str_norm)
 
     def __hash__(self):
         return hash(self.__key())
