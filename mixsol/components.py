@@ -15,7 +15,7 @@ class Solution:
 
         self.molarity = molarity
         self.solutes = solutes
-        self.solute_dict = name_to_components(solutes, delimiter="_", factor=molarity)
+        self.solute_dict = name_to_components(solutes, delimiter="_", factor=1)
         total_solute_amt = sum(self.solute_dict.values())
         solute_dict_norm = {
             k: v / total_solute_amt for k, v in self.solute_dict.items()

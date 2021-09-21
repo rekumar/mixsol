@@ -71,7 +71,7 @@ class Mixer:
                     solution_matrix[m, n] = s.solute_dict[c] * s.molarity
                 elif c in s.solvent_dict:
                     solution_matrix[m, n] = s.solvent_dict[c]
-                    solvent_idx.add(m)
+                    solvent_idx.add(n)
         solvent_idx = list(solvent_idx)
 
         return solution_matrix, solvent_idx, components
@@ -130,7 +130,7 @@ class Mixer:
         if not self._is_plausible(A, b):
             return np.nan
         x, err = nnls(A.T, b, maxiter=1e3)
-        x.round(15)  # numerical solution has very tiny errors
+        x.round(12)  # numerical solution has very tiny errors
         if err > tolerance:
             return np.nan
         if np.logical_and(x > 0, x < min_fraction).any():
@@ -265,6 +265,11 @@ class Mixer:
         g_norm = self.graph._normalize(self.graph.g)
         v_end = np.array([self.target_volumes.get(soln, 0) for soln in self.solutions])
         v_needed = self.graph.propagate_load(v_end)
+        self.initial_volumes_required = {
+            solution: volume
+            for solution, volume in zip(self.solutions, v_needed)
+            if volume > 0
+        }
         self.mixing_order = []
         for generation in self.graph.hierarchy():
             mixes_in_this_gen = {}
@@ -310,13 +315,20 @@ class Mixer:
         #     volume_graph[idx, idx] = self.target_volumes.get(self.solutions[idx], 0)
         print("===== Stock Prep =====")
         for solution, volume in self.stock_volumes.items():
-            print(f"{volume:.2f} of {solution}")
-        print(f"====== Mixing =====")
+            if volume > 0:
+                print(f"{volume:.2f} of {solution}")
+        first = True
         for generation in self.transfers_per_generation:
             for source, transfers in generation.items():
+                if not any([source != destination for destination in transfers]):
+                    continue
+                if first:
+                    print(f"====== Mixing =====")
+                    first = False
                 print(f"Distribute {source}:")
                 for destination, volume in transfers.items():
-                    print(f"\t{volume:.2f} to {destination}")
+                    if destination != source:
+                        print(f"\t{volume:.2f} to {destination}")
 
     def plot(self, ax=None):
         """Plots the pipetting instructions as a directed graph, layered by generation. Will substitute solution names with their .alias if present."""
@@ -483,7 +495,7 @@ class Weigher:
         usable_powder_indices = self._filter_powders(target_vector)
         matrix = self.matrix[usable_powder_indices]
         mass_vector, error = nnls(matrix.T, target_vector.T, maxiter=1e3)
-        mass_vector = mass_vector.round(15)
+        mass_vector = mass_vector.round(12)
         if error > tolerance:  # TODO #1
             raise Exception(
                 f"Could not achieve target solution from given powders. Error={error}, tolerance was {tolerance}"
@@ -511,7 +523,7 @@ class Weigher:
         v = np.zeros(len(self.components))
         for powder, mass in weights.items():
             m = self._lookup_powder(powder)
-            v += (self.matrix[m] * mass).round(15)
+            v += (self.matrix[m] * mass).round(12)
 
         if norm is None:
             norm = v.max()
