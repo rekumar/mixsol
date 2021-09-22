@@ -153,7 +153,7 @@ result = weigher.weights_to_solution(
     weights=answer,
     volume=1e-3, #in L
     solvent='DMF9_DMSO1',
-    norm='Pb'
+    norm='Pb', #normalize the formula+molarity such that Pb=1
 )
 print(result) #result is a Solution object
 ```
