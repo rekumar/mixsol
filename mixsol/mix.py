@@ -523,7 +523,7 @@ class Weigher:
         v = np.zeros(len(self.components))
         for powder, mass in weights.items():
             m = self._lookup_powder(powder)
-            v += (self.matrix[m] * mass).round(12)
+            v += self.matrix[m] * mass
 
         if norm is None:
             norm = v.max()

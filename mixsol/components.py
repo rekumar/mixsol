@@ -1,5 +1,5 @@
 from mixsol.helpers import components_to_name, name_to_components, calculate_molar_mass
-import json
+import numpy as np
 
 
 class Solution:
@@ -17,10 +17,9 @@ class Solution:
         self.solutes = solutes
         self.solute_dict = name_to_components(solutes, delimiter="_", factor=1)
         total_solute_amt = sum(self.solute_dict.values())
-        solute_dict_norm = {
+        self._solute_dict_norm = {
             k: v / total_solute_amt for k, v in self.solute_dict.items()
         }  # normalize so total solute amount is 1.0. used for hashing/comparison to other Solution's
-        self.__solute_str_norm = json.dumps(solute_dict_norm, sort_keys=True)
         self.solvent = solvent
         self.solvent_dict = name_to_components(solvent, factor=1, delimiter="_")
         # self.solvent = components_to_name(self.solvent_dict, delimiter="_")
@@ -28,7 +27,6 @@ class Solution:
         self.solvent_dict = {
             k: v / total_solvent_amt for k, v in self.solvent_dict.items()
         }  # normalize so total solvent amount is 1.0
-        self.__solvent_str_norm = json.dumps(self.solvent_dict, sort_keys=True)
         self.alias = alias
 
     def __str__(self):
@@ -42,17 +40,23 @@ class Solution:
         return f"<Solution>" + str(self)
 
     def __eq__(self, other):
-        if isinstance(other, self.__class__):
-            return (
-                self.solute_dict == other.solute_dict
-                and self.molarity == other.molarity
-                and self.solvent_dict == other.solvent_dict
-            )
-        else:
+        if not isinstance(other, self.__class__):
             return False
+        for d1, d2 in zip(
+            [self._solute_dict_norm, self.solvent_dict],
+            [other._solute_dict_norm, other.solvent_dict],
+        ):
+            if d1.keys() != d2.keys():
+                return False
+            for k in d1.keys():
+                if (
+                    np.abs(d1[k] / d2[k] - 1) > 1.0001
+                ):  # tolerance to accomodate rounding errors
+                    return False
+        return True
 
     def __key(self):
-        return (self.__solvent_str_norm, self.molarity, self.__solute_str_norm)
+        return (self.__solvent_str_norm, self.__solute_str_norm)
 
     def __hash__(self):
         return hash(self.__key())
