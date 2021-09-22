@@ -147,20 +147,40 @@ print(answer) #masses of each powder, in grams
 {'Cs_I': 0.012990496098, 'Pb_I2': 0.322706258, 'Pb_Br2': 0.082576575, 'Pb_Cl2': 0.020857935, 'MAI': 0.02384543385, 'FAI': 0.1375746568}
 ```
 
-Finally, we can also generate a `Solution` object by inputting a `{powder:mass}` dictionary into `Weigher`. The molarity of the output will by default be determined by the largest component amount. Passing a component or a numeric value to `norm` can control the molarity. Note that this does not affect the solution itself, just the relative values of the formula units and the overall molarity.
-
+Finally, we can also generate a `Solution` object by inputting a `{powder:mass}` dictionary into `Weigher`. We will just use the answer from before, but this can be manually input. 
 ```
 result = weigher.weights_to_solution(
+    weights=answer,
+    volume=1e-3,
+    solvent='DMF9_DMSO1',
+)
+print(result)
+```
+```
+2.4M Cs0.0208_I_MA0.0625_FA0.333_Br0.188_Cl0.0625_Pb0.417 in DMF9_DMSO1
+```
+The molarity of the output will by default be determined by the largest component amount. This can be a bit silly. Passing a component or a numeric value to `norm` can control the molarity. Note that this does not affect the solution itself, just the relative values of the formula units and the overall molarity.
+
+```
+result2 = weigher.weights_to_solution(
     weights=answer,
     volume=1e-3, #in L
     solvent='DMF9_DMSO1',
     norm='Pb', #normalize the formula+molarity such that Pb=1
 )
-print(result) #result is a Solution object
+print(result2) #result is a Solution object
 ```
 ```
 1.0M Cs0.05_I2.4_Pb_MA0.15_Br0.45_Cl0.15_FA0.8 in DMF9_DMSO1
 ```
 
+`Solution` objects can be compared - even if their molarity/formulae are apparently different, they will show as equal if the effective molarity of each component is within 0.01% between the solutions.
+
+```
+result == result2
+```
+```
+True
+```
 
 Read the full documentation [here](https://mixsol.readthedocs.io/en/latest/).
