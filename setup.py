@@ -8,7 +8,7 @@ setup(
     description="Planning tool for combinatorial solution mixing. Reach target solutions from mixes of starting solutions, constrained by minimum pipetting volumes. Also aids in computing amounts of powdered reagents required to form solutions with target solutes + molarities.",  # Give a short description about your library
     author="Rishi E Kumar",  # Type in your name
     author_email="rishi42@gmail.com",  # Type in your E-Mail
-    url="https://github.com/rekumar/reponame",  # Provide either the link to your github or to your website
+    url="https://github.com/rekumar/mixsol",  # Provide either the link to your github or to your website
     download_url="https://github.com/rekumar/mixsol/archive/refs/tags/v0.1.tar.gz",  # I explain this later on
     keywords=[
         "Chemistry",
