@@ -390,7 +390,7 @@ class Mixer:
                     weight="bold",
                     zorder=1000,
                 )
-
+        plt.axis("off")
         plt.tight_layout()
 
 
