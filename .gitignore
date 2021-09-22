@@ -1,3 +1,7 @@
+# makefiles for docs
+.bat
+Makefile
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
