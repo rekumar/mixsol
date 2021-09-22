@@ -92,8 +92,10 @@ sm.plot(ax=ax)
 ```
 ![Example Mixer.plot()](/docs/example_graph.png)
 
+Note that the units of volume here are arbitrary. Using SI units for small volumes might cause numerical issues when solving a mixture strategy (eg you should use 10 microliters instead of 1e-5 liters). 
+
 ## Solution Preparation
-Mixsol aids in determining the mass of solid reagents needed to form target solutions. We can also check the actual solution formed from recorded reagent masses.
+Mixsol aids in determining the mass of solid reagents needed to form target solutions. We can also check the actual solution formed from recorded reagent masses. Here, the units *do* matter, and you should stick to SI units (mass in grams, volume in liters).
 
 We define solid reagents with the `Powder` class. This requires at least a chemical formula delimited by underscores, similar to the `Solution` definition earlier. If this formula is a proper chemical formula of elements, the molar mass is calculated automatically. If not, you can pass the molar mass directly. The `calculate_molar_mass` function can be used for convenience. `alias` does the same thing it did for `Solution`.
 
