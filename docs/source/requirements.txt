@@ -1,1 +1,4 @@
-mixsol
+scipy
+numpy
+matplotlib
+molmass
