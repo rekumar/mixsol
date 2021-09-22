@@ -1,5 +1,6 @@
 ![MixSol](/docs/1.svg)
 
+`pip install mixsol`
 
 Pipetting planner for efficient combinatorial mixing of solutions. Often we want to interpolate a few stock solutions into many target mixtures. If some of these mixtures require only a tiny amount of a stock solution, the minimum volume for our pipette may limit our ability to make this solution without a serial dilution. Mixsol searches for mixing sequences that use only other target solutions as stepping stones to reach these difficult mixtures, minimizing waste.
 
