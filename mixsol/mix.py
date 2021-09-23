@@ -68,7 +68,7 @@ class Mixer:
         for m, s in enumerate(solutions):
             for n, c in enumerate(components):
                 if c in s.solute_dict:
-                    solution_matrix[m, n] = s.solute_dict[c] * s.molarity
+                    solution_matrix[m, n] = s.solute_dict[c]
                 elif c in s.solvent_dict:
                     solution_matrix[m, n] = s.solvent_dict[c]
                     solvent_idx.add(n)
@@ -98,7 +98,7 @@ class Mixer:
         target_matrix = np.zeros((len(components),))
         for m, c in enumerate(components):
             if c in target.solute_dict:
-                target_matrix[m] = target.solute_dict[c] * target.molarity * volume
+                target_matrix[m] = target.solute_dict[c] * volume
             elif c in target.solvent_dict:
                 target_matrix[m] = target.solvent_dict[c] * volume
         return target_matrix.T
@@ -448,9 +448,7 @@ class Weigher:
         target_matrix = np.zeros((len(self.components),))
         for m, component in enumerate(self.components):
             if component in target.solute_dict:
-                target_matrix[m] = (
-                    target.solute_dict[component] * target.molarity * volume
-                )
+                target_matrix[m] = target.solute_dict[component] * volume
         return target_matrix.T
 
     def _filter_powders(self, target: Solution) -> list:

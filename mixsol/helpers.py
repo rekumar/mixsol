@@ -60,7 +60,9 @@ def name_to_components(
                 pass
         if species == "":
             continue
-        components[species] = count * factor
+        amount = count * factor
+        if amount > 0:
+            components[species] = amount
     return components
 
 
