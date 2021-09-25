@@ -1,4 +1,4 @@
-![MixSol](/docs/1.svg)
+![MixSol](/docs/mixsol.svg)
 
 `pip install mixsol`
 
@@ -7,6 +7,9 @@ Pipetting planner for efficient combinatorial mixing of solutions. Often we want
 Mixsol also has the ability to calculate the masses of solid reagents needed to make a target solution. Finally, measured amounts of solid reagents can be input to calculate the actual solution we have made.
 
 Happy mixing!
+
+![Interpolating 4 stock solutions into 40 target solutions on an OpenTrons liquid handler!](/docs/mixing.gif)
+
 
 # Examples
 
