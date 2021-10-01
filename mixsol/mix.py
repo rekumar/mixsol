@@ -492,7 +492,7 @@ class Weigher:
         target_vector = self._solution_to_vector(target=target, volume=volume)
         usable_powder_indices = self._filter_powders(target_vector)
         matrix = self.matrix[usable_powder_indices]
-        mass_vector, error = nnls(matrix.T, target_vector.T, maxiter=1e3)
+        mass_vector, error = nnls(matrix.T, target_vector.T, maxiter=1e4)
         mass_vector = mass_vector.round(12)
         if error > tolerance:  # TODO #1
             raise Exception(

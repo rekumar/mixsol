@@ -1,6 +1,6 @@
 import numpy as np
 from molmass import Formula
-
+import re
 
 ## parsing formulae -> dictionaries
 def components_to_name(
@@ -29,10 +29,22 @@ def components_to_name(
     return composition_label[:-1]
 
 
+def __digest_string(s, factor=1, delimiter="_"):
+    components = {}
+    groups = re.findall(f"{delimiter}?(\D*)(\D*[+-]?[0-9]*[.]?[0-9]+){delimiter}?", s)
+    parenthesized = 0
+    for species, amount in groups:
+        if "(" in species:
+            parenthesized += 1
+        if parenthesized == 0:
+            components[species] = float(amount) * factor
+        if ")" in species:
+            parenthesized -= 1
+    return components
+
+
 def name_to_components(
-    name: str,
-    factor: float = 1,
-    delimiter: str = "_",
+    name: str, factor: float = 1, delimiter: str = "_", components=None
 ) -> dict:
     """
     given a chemical formula, returns dictionary with individual components/amounts
@@ -43,26 +55,33 @@ def name_to_components(
         name (str): formula string
         factor (float): factor to multiply all amount values in the string by. Defaults to 1.
         delimiter (str): indicator string to split the formula into components. Defaults to "_"
-
+        components: should be left at None, used for internal function recursion!
     Returns:
         dict: {component:amount}
     """
-    components = {}
-    for part in name.split(delimiter):
-        species = part
-        count = 1.0
-        for l in range(len(part), 0, -1):
-            try:
-                count = float(part[-l:])
-                species = part[:-l]
-                break
-            except:
-                pass
-        if species == "":
-            continue
-        amount = count * factor
-        if amount > 0:
-            components[species] = amount
+    if components is None:
+        components = {}
+
+    name_ = name
+    delimiter_indices = [i for i, letter in enumerate(name) if letter == delimiter]
+    for idx in delimiter_indices[::-1]:
+        if name[idx - 1].isalpha():
+            name_ = name_[:idx] + "1" + name_[idx:]
+
+    for comp, amt in __digest_string(name_, factor=factor, delimiter=delimiter).items():
+        if comp in components:
+            components[comp] += amt
+        else:
+            components[comp] = amt
+
+    parenthesized = re.findall("\((.*)\)(\D*[+-]?[0-9]*[.]?[0-9]+)", name_)
+    for group, group_factor in parenthesized:
+        components = name_to_components(
+            name=group,
+            delimiter=delimiter,
+            factor=factor * float(group_factor),
+            components=components,
+        )
     return components
 
 
