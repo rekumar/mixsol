@@ -19,7 +19,6 @@ class Mixer:
         """
         if targets is None:
             targets = {}
-        stock_matrix, _, stock_components = self._solutions_to_matrix(stock_solutions)
 
         self.target_solutions = list(targets.keys())
         self.solutions = list(set(stock_solutions + self.target_solutions))
@@ -30,78 +29,11 @@ class Mixer:
             self.solution_matrix,
             self.solvent_idx,
             self.components,
-        ) = self._solutions_to_matrix(self.solutions)
+        ) = _solutions_to_matrix(self.solutions)
         self.stock_idx = [
             self.solutions.index(stock) for stock in stock_solutions
         ]  # rows of solution matrix that belong to stock solutions
         self.__solved = False
-
-    def _solutions_to_matrix(self, solutions: list, components: list = None) -> tuple:
-        """Converts a list of solutions into a matrix of molarity of each component in each solution
-
-        Args:
-            solutions (list): Solution objects
-            components (list, optional): individual components that cover all solutions. If none, will generate this from the solution list
-
-        Returns:
-            solution_matrix (np.ndarray):  rows are solutions, columns are components
-            solvent_idx (list): indices of columns that encode solvent components
-            components (list): components that cover all solutions (column key)
-
-
-        """
-        if isinstance(solutions, Solution):
-            solutions = [solutions]
-
-        # get possible solution components from stock list
-        if components is None:
-            components = set()
-            for s in solutions:
-                components.update(s.solute_dict.keys(), s.solvent_dict.keys())
-            components = list(
-                components
-            )  # sets are not order-preserving, lists are - just safer this way
-
-        # organize components into a stock matrix, keep track of which rows are solvents
-        solution_matrix = np.zeros((len(solutions), len(components)))
-        solvent_idx = set()
-        for m, s in enumerate(solutions):
-            for n, c in enumerate(components):
-                if c in s.solute_dict:
-                    solution_matrix[m, n] = s.solute_dict[c]
-                elif c in s.solvent_dict:
-                    solution_matrix[m, n] = s.solvent_dict[c]
-                    solvent_idx.add(n)
-        solvent_idx = list(solvent_idx)
-
-        return solution_matrix, solvent_idx, components
-
-    def _solution_to_vector(
-        self,
-        target: Solution,
-        volume: float = 1,
-        components: list = None,
-    ) -> np.ndarray:
-        """Convert a Solution object into a vector of molarities. vector matches the component ordering of the solution matrix
-
-        Args:
-            target (Solution): Target solution
-            volume (float, optional): Volume of solution desired. Defaults to 1.
-            components (list, optional): Subset of components to construct vector around. If None (default), uses component list for solution matrix.
-
-        Returns:
-            np.ndarray: nx1 vector of molarities in order of components list
-        """
-        # organize target solution into a matrix of total mols desired of each component
-        if components is None:
-            components = self.components
-        target_matrix = np.zeros((len(components),))
-        for m, c in enumerate(components):
-            if c in target.solute_dict:
-                target_matrix[m] = target.solute_dict[c] * volume
-            elif c in target.solvent_dict:
-                target_matrix[m] = target.solvent_dict[c] * volume
-        return target_matrix.T
 
     def _is_plausible(
         self, solution_matrix: np.ndarray, target_vector: np.ndarray
@@ -140,6 +72,31 @@ class Mixer:
         for idx, x_ in zip(solution_indices, x):
             x_full[idx] = x_
         return x_full
+
+    def _solution_to_vector(
+        self,
+        target: Solution,
+        volume: float = 1,
+        components: list = None,
+    ) -> np.ndarray:
+        """Convert a Solution object into a vector of molarities. vector matches the component ordering of the solution matrix
+
+        Args:
+            target (Solution): Target solution
+            volume (float, optional): Volume of solution desired. Defaults to 1.
+            components (list, optional): Subset of components to construct vector around. If None (default), uses component list for solution matrix.
+
+        Returns:
+            np.ndarray: nx1 vector of molarities in order of components list
+        """
+        # organize target solution into a matrix of total mols desired of each component
+        target_matrix = np.zeros((len(components),))
+        for m, c in enumerate(components):
+            if c in target.solute_dict:
+                target_matrix[m] = target.solute_dict[c] * volume
+            elif c in target.solvent_dict:
+                target_matrix[m] = target.solvent_dict[c] * volume
+        return target_matrix.T
 
     def mix(
         self,
@@ -534,3 +491,71 @@ class Weigher:
             components={c: v for c, v in zip(self.components, v) if v > 0}
         )
         return Solution(solutes=solutes, solvent=solvent, molarity=norm / volume)
+
+
+def _solutions_to_matrix(solutions: list, components: list = None) -> tuple:
+    """Converts a list of solutions into a matrix of molarity of each component in each solution
+
+    Args:
+        solutions (list): Solution objects
+        components (list, optional): individual components that cover all solutions. If none, will generate this from the solution list
+
+    Returns:
+        solution_matrix (np.ndarray):  rows are solutions, columns are components
+        solvent_idx (list): indices of columns that encode solvent components
+        components (list): components that cover all solutions (column key)
+
+
+    """
+    if isinstance(solutions, Solution):
+        solutions = [solutions]
+
+    # get possible solution components from stock list
+    if components is None:
+        components = set()
+        for s in solutions:
+            components.update(s.solute_dict.keys(), s.solvent_dict.keys())
+        components = list(
+            components
+        )  # sets are not order-preserving, lists are - just safer this way
+
+    # organize components into a stock matrix, keep track of which rows are solvents
+    solution_matrix = np.zeros((len(solutions), len(components)))
+    solvent_idx = set()
+    for m, s in enumerate(solutions):
+        for n, c in enumerate(components):
+            if c in s.solute_dict:
+                solution_matrix[m, n] = s.solute_dict[c]
+            elif c in s.solvent_dict:
+                solution_matrix[m, n] = s.solvent_dict[c]
+                solvent_idx.add(n)
+    solvent_idx = list(solvent_idx)
+
+    return solution_matrix, solvent_idx, components
+
+
+def tween(solutions: list, steps: int) -> list:
+    """Generate a list of solutions that are a linear interpolation between the given solutions"""
+    solution_matrix, solvent_idx, components = _solutions_to_matrix(solutions)
+    solution_matrix = np.array(solution_matrix)
+    solute_idx = [i for i in range(solution_matrix.shape[1]) if i not in solvent_idx]
+    solute_matrix = solution_matrix[:, solute_idx]
+    solvent_matrix = solution_matrix[:, solvent_idx]
+
+    # generate the tween
+    tween = np.zeros((steps, solution_matrix.shape[1]))
+    for i in range(steps):
+        tween[i] = np.interp(i, range(steps), solute_matrix.T)
+    tween[:, solvent_idx] = solvent_matrix
+
+    # convert back to solutions
+    return [
+        Solution(
+            solutes=components_to_name(
+                components={c: v for c, v in zip(components, v)}
+            ),
+            solvent=s.solvent_dict,
+            molarity=s.molarity,
+        )
+        for v in tween
+    ]
