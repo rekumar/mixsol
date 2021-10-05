@@ -62,13 +62,20 @@ def name_to_components(
     if components is None:
         components = {}
 
+    if len(name) == 0:
+        return {}
+
     name_ = name
     delimiter_indices = [i for i, letter in enumerate(name) if letter == delimiter]
     for idx in delimiter_indices[::-1]:
         if name[idx - 1].isalpha():
             name_ = name_[:idx] + "1" + name_[idx:]
+    if name_[-1].isalpha():
+        name_ = name_ + "1"
 
     for comp, amt in __digest_string(name_, factor=factor, delimiter=delimiter).items():
+        if amt == 0:
+            continue
         if comp in components:
             components[comp] += amt
         else:
@@ -82,6 +89,7 @@ def name_to_components(
             factor=factor * float(group_factor),
             components=components,
         )
+
     return components
 
 
