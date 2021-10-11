@@ -3,13 +3,13 @@ from distutils.core import setup
 setup(
     name="mixsol",
     packages=["mixsol"],
-    version="0.1",
+    version="0.2",
     license="GPLv3",
     description="Planning tool for combinatorial solution mixing. Reach target solutions from mixes of starting solutions, constrained by minimum pipetting volumes. Also aids in computing amounts of powdered reagents required to form solutions with target solutes + molarities.",
     author="Rishi E Kumar",
     author_email="rishi42@gmail.com",
     url="https://github.com/rekumar/mixsol",
-    download_url="https://github.com/rekumar/mixsol/archive/refs/tags/v0.3.tar.gz",
+    download_url="https://github.com/rekumar/mixsol/archive/refs/tags/v0.4.tar.gz",
     keywords=[
         "Chemistry",
         "Mixing",
@@ -19,12 +19,7 @@ setup(
         "Molarity",
         "Solution",
     ],
-    install_requires=[
-        "scipy",
-        "numpy",
-        "matplotlib",
-        "molmass",
-    ],
+    install_requires=["scipy", "numpy", "matplotlib", "molmass", "json"],
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",

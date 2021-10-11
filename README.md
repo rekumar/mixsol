@@ -14,7 +14,7 @@ Happy mixing!
 # Examples
 
 ## Solution Mixing
-Solutions are defined with the `Solution` class. Solutes and solvents are both defined by their formula, which follows the `(name1)(amount1)_(name2)(amount2)_..._(name)(amount)` format. The names do not have to correspond to elements, so you can use placeholders for units that will be mixed. An `alias` can be provided for the solution to simplify later analysis.
+Solutions are defined with the `Solution` class. Solutes and solvents are both defined by their formula, which follows the `(name1)(amount1)_(name2)(amount2)_..._(name)(amount)` format. The names do not have to correspond to elements, so you can use placeholders for units that will be mixed. Parentheses can be used to simplify formulae as well: `A2_B2_C` == `(A_B)2_C`. An `alias` can be provided for the solution to simplify later analysis.
 
 ```
 stock_solutions = [
