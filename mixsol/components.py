@@ -5,8 +5,14 @@ import json
 
 class Solution:
     def __init__(
-        self, solvent: str, solutes: str = "", molarity: float = 0, alias: str = None
+        self,
+        solutes: str = "",
+        solvent: str = None,
+        molarity: float = 0,
+        alias: str = None,
     ):
+        if solvent is None:
+            raise ValueError("Must define a solvent!")
         if solutes != "" and molarity == 0:
             raise ValueError(
                 "If the solution contains solutes, the molarity must be >0!"
@@ -54,8 +60,8 @@ class Solution:
         if not isinstance(other, self.__class__):
             return False
         for d1, d2 in zip(
-            [self._solute_dict_norm, self.solvent_dict],
-            [other._solute_dict_norm, other.solvent_dict],
+            [self.solute_dict, self.solvent_dict],
+            [other.solute_dict, other.solvent_dict],
         ):
             if d1.keys() != d2.keys():
                 return False
