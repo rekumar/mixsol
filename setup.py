@@ -19,7 +19,7 @@ setup(
         "Molarity",
         "Solution",
     ],
-    install_requires=["scipy", "numpy", "matplotlib", "molmass", "json"],
+    install_requires=["scipy", "numpy", "matplotlib", "molmass"],
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
