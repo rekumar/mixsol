@@ -17,14 +17,16 @@ Happy mixing!
 Solutions are defined with the `Solution` class. Solutes and solvents are both defined by their formula, which follows the `(name1)(amount1)_(name2)(amount2)_..._(name)(amount)` format. The names do not have to correspond to elements, so you can use placeholders for units that will be mixed. Parentheses can be used to simplify formulae as well: `A2_B2_C` == `(A_B)2_C`. An `alias` can be provided for the solution to simplify later analysis.
 
 ```
+import mixsol as mx
+
 stock_solutions = [
-    Solution(
+    mx.Solution(
         solutes='FA_Pb_I3',
         solvent='DMF9_DMSO1',
         molarity=1,
         alias='FAPI'
     ),
-    Solution(
+    mx.Solution(
         solutes='MA_Pb_I3',
         solvent='DMF9_DMSO1',
         molarity=1,
@@ -35,16 +37,28 @@ stock_solutions = [
 
 This process goes for both stock and target solutions. 
 
+You can manually generate your target solutions and place them in a list like so:
+
 ```
-densetargets = []
+targets = []
 for a in np.linspace(0, 0.8, 5):
-    densetargets.append(Solution(
+    targets.append(mx.Solution(
         solutes=f"FA{a:0.3f}_MA{1-a:.3f}_Pb_I3",
         solvent="DMF9_DMSO1",
         molarity=1,
         alias=f'FA_{a:.3f}'
     ))
 ```
+
+Or, if you want to mix in equal steps between two (or more!) endpoint solutions, you can use the `interpolate` function to generate a mesh of `Solution` obects. The following code block is nearly equivalent to the one above (it will interpolate all the way from 0-1 instead of 0-0.8, and it won't generate `alias` values).
+
+```
+target_mesh = mx.interpolate(
+	solutions=stock_solutions, #this should be a list of 2 or more Solution's
+	steps=5 #number of divisions. In this example, steps=5 will mix the input Solution's in 20% increments
+	)
+```
+
 
 Stock and target solutions go into a `Mixer` object
 
@@ -53,14 +67,14 @@ sm = Mixer(
     stock_solutions = stock_solutions,
     targets = {
         t:60      #Solution:volume dictionary
-        for t in densetargets
+        for t in targets
     })
 ```
 which is then solved with constraints
 ```
 sm.solve(
     min_volume=20, #minimum volume for a single liquid transfer
-    max_inputs = 3 #maximum number of solutions that can be mixed to form one target
+    max_inputs = 3 #maximum number of solutions (stock or other target) that can be mixed to form one target
     )
 ```
 
@@ -162,7 +176,7 @@ print(result)
 ```
 2.4M Cs0.0208_I_MA0.0625_FA0.333_Br0.188_Cl0.0625_Pb0.417 in DMF9_DMSO1
 ```
-The molarity of the output will by default be determined by the largest component amount. This can be a bit silly. Passing a component or a numeric value to `norm` can control the molarity. Note that this does not affect the solution itself, just the relative values of the formula units and the overall molarity.
+The molarity of the output will by default be determined by the largest component amount. This can be a bit silly. Passing a component or a numeric value to `molarity` can be used to manually set the molarity. Note that this does not affect the solution itself, just the relative values of the formula units and the overall molarity.
 
 ```
 result2 = weigher.weights_to_solution(
