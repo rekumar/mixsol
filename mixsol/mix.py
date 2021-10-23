@@ -433,7 +433,7 @@ class Weigher:
         raise ValueError(f"Could not find powder {s} in this Weigher!")
 
     def get_weights(
-        self, target: Solution, volume: float, tolerance: float = 1e-10
+        self, target: Solution, volume: float, tolerance: float = 1e-5
     ) -> dict:
         """calculate the weights of stock powders necessary to make a target Solution
 
