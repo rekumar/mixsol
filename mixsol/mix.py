@@ -109,6 +109,7 @@ class Mixer:
         min_volume: float = 0,
         verbose: bool = False,
         max_inputs: int = None,
+        strategy: str = "least_inputs",
     ) -> np.ndarray:
         """Calculate mixture of stock solutions to achieve target solution
 
@@ -120,10 +121,17 @@ class Mixer:
             min_volume (float, optional): minimum volume that can be mixed from any single solution (useful for pipettes with a minimum aspiration volume). Defaults to 0.
             verbose (bool, optional): if True, returns all plausible mixture vectors. If False (default), only returns the best (largest minimum single volume transfer) vector.
             max_inputs (int, optional): maximum number of solutions to mix into the given target. Defaults to None (no limit).
+            strategy (str, optional): strategy to select mixing inputs from the set of valid inputs.
+                "least_inputs": select mixing inputs such that the smallest input volume is maximized. this should mix with the least number of input solutions
+                "prefer_stock": select mixing inputs such that the number of non-stock inputs is minimized.
 
         Returns:
             np.ndarray: vector of solution volumes corresponding to rows in the solution matrix (self.solutions). If verbose=True, this will be a list of such vectors that all reach the target solution
         """
+        if strategy not in ["least_inputs", "prefer_stock"]:
+            raise ValueError(
+                "Mixing strategy must be either 'least_inputs' or 'prefer_stock'"
+            )
         min_fraction = min_volume / volume
         if solution_indices is None or solution_indices == "stock":
             solution_indices = self.stock_idx
@@ -142,18 +150,36 @@ class Mixer:
                     min_fraction=min_fraction,
                 )
                 if not np.isnan(x).any():
-                    possible_mixtures.append(x)
+                    possible_mixtures.append(
+                        x.round(12) * volume
+                    )  # remove floating pt precision errors
         if len(possible_mixtures) == 0:
             return np.nan
-        possible_mixtures.sort(
-            key=lambda x: -min(x[x > 0])
-        )  # sort such that the mixture with the largest minimum fraction is first
+        possible_mixtures = [pm for pm in np.unique(possible_mixtures, axis=0)]
+
+        if strategy == "least_inputs":
+            possible_mixtures.sort(
+                key=lambda x: -min(x[x > 0])
+            )  # sort such that the mixture with the largest minimum fraction is first
+        elif strategy == "prefer_stock":
+            nonstock_idx = [
+                i for i in range(len(self.solutions)) if i not in self.stock_idx
+            ]
+            possible_mixtures.sort(
+                key=lambda x: (np.sum(x[nonstock_idx] > 0).sum(), -min(x[x > 0]))
+            )
         if verbose:
-            return possible_mixtures * volume
-        return possible_mixtures[0] * volume
+            return possible_mixtures
+
+        return possible_mixtures[0]
 
     def _solve_adjacency_matrix(
-        self, min_volume: float, max_inputs: int, max_generations: int, tolerance: float
+        self,
+        min_volume: float,
+        max_inputs: int,
+        max_generations: int,
+        tolerance: float,
+        strategy: str,
     ):
         """solves the mixing plan for all target solutions. Other target solutions can act as stepping stones to a target (multiple mixing generations).
 
@@ -161,6 +187,10 @@ class Mixer:
             min_volume (float): minimum volume for single liquid transfer. useful for pipettes with a minimum aspiration volume
             max_inputs (int): maximum number of solutions that can be mixed to achieve a target solution
             max_generations (int): maximum generations/rounds of mixing that are allowed
+            strategy (str, optional): strategy to select mixing inputs from the set of valid inputs.
+                "least_inputs": select mixing inputs such that the smallest input volume is maximized. this should mix with the least number of input solutions
+                "prefer_stock": select mixing inputs such that the number of non-stock inputs is minimized.
+
 
         Returns:
             np.ndarray: adjacency matrix describing all volume transfers to achieve target solutions
@@ -189,6 +219,7 @@ class Mixer:
                     min_volume=min_volume,
                     max_inputs=max_inputs,
                     tolerance=tolerance,
+                    strategy=strategy,
                 )
                 if not np.isnan(x).any():
                     graph[i, :] = x
@@ -203,6 +234,7 @@ class Mixer:
         max_inputs: int = None,
         max_generations: int = np.inf,
         tolerance: float = 1e-5,
+        strategy: str = "least_inputs",
     ):
         """user-facing method to solve mixing strategy for all target solutions
 
@@ -210,6 +242,10 @@ class Mixer:
             min_volume (float): minimum volume for single liquid transfer. useful for pipettes with a minimum aspiration volume
             max_inputs (int): maximum number of solutions that can be mixed to achieve a target solution. Default is None.
             max_generations (int): maximum generations/rounds of mixing that are allowed. Default is np.inf (ie no limit)
+            strategy (str, optional): strategy to select mixing inputs from the set of valid inputs.
+                "least_inputs": select mixing inputs such that the smallest input volume is maximized. this should mix with the least number of input solutions
+                "prefer_stock": select mixing inputs such that the number of non-stock inputs is minimized.
+
         """
         if max_inputs is None:
             max_inputs = len(self.solutions) - 1
@@ -219,6 +255,7 @@ class Mixer:
             max_inputs=max_inputs,
             max_generations=max_generations,
             tolerance=tolerance,
+            strategy=strategy,
         )
         self.graph = DirectedGraph(adjacency_matrix)
         g_norm = self.graph._normalize(self.graph.g)
