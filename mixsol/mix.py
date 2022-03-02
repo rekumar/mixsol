@@ -94,10 +94,10 @@ class Mixer:
             components = self.components
         target_matrix = np.zeros((len(components),))
         for m, c in enumerate(components):
-            if c in target.solute_dict:
-                target_matrix[m] = target.solute_dict[c] * volume
-            elif c in target.solvent_dict:
-                target_matrix[m] = target.solvent_dict[c] * volume
+            if c in target.solutes:
+                target_matrix[m] = target.solutes[c] * volume
+            elif c in target.solvent:
+                target_matrix[m] = target.solvent[c] * volume
         return target_matrix.T
 
     def mix(
@@ -443,8 +443,8 @@ class Weigher:
         # organize target solution into a matrix of total mols desired of each component
         target_matrix = np.zeros((len(self.components),))
         for m, component in enumerate(self.components):
-            if component in target.solute_dict:
-                target_matrix[m] = target.solute_dict[component] * volume
+            if component in target.solutes:
+                target_matrix[m] = target.solutes[component] * volume
         return target_matrix.T
 
     def _filter_powders(self, target: Solution) -> list:
@@ -573,7 +573,7 @@ def _solutions_to_matrix(solutions: list, components: list = None) -> tuple:
     if components is None:
         components = set()
         for s in solutions:
-            components.update(s.solute_dict.keys(), s.solvent_dict.keys())
+            components.update(s.solutes.keys(), s.solvent.keys())
         components = list(
             components
         )  # sets are not order-preserving, lists are - just safer this way
@@ -587,10 +587,10 @@ def _solutions_to_matrix(solutions: list, components: list = None) -> tuple:
     solvent_idx = set()
     for m, s in enumerate(solutions):
         for n, c in enumerate(components):
-            if c in s.solute_dict:
-                solution_matrix[m, n] = s.solute_dict[c]
-            elif c in s.solvent_dict:
-                solution_matrix[m, n] = s.solvent_dict[c]
+            if c in s.solutes:
+                solution_matrix[m, n] = s.solutes[c]
+            elif c in s.solvent:
+                solution_matrix[m, n] = s.solvent[c]
                 solvent_idx.add(n)
     solvent_idx = list(solvent_idx)
 
