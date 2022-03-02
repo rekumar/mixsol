@@ -509,9 +509,9 @@ class Weigher:
             weights (dict): {powder:mass(g)} dictionary. Powders must be present in this `Weigher`, and can be referred to by the `Powder.alias` or `Powder.formula` attributes
             volume (float): volume (L) of solvent powder is dispersed into
             solvent (str): Formula string for the solvent. ie "IPA", "DMF9_DMSO1", "EtOH0.5_IPA0.5".
-            molarity (float, optional): Value to set molarity of resulting Solution. This can be a directly set float value, or the name of a single component
-                of the resulting `Solution` that molarity will be normalized to. Note that this only affects the string representation of the `Solution.solutes`,
-                the actual `Solution` should be equivalent regardless of your choice here.
+            molarity (float, optional): Value to set molarity of resulting Solution. This can be a directly set float value, the name of a single component
+                of the resulting `Solution` that molarity will be normalized to, or a list of names of components the sum of which will be used as the molarity.
+                Note that this only affects the molarity value and string representation of the `Solution`, the actual `Solution` will be equivalent regardless of your choice here.
         Returns:
             Solution: solution object resulting from the powder mixing
         """
@@ -526,13 +526,20 @@ class Weigher:
                     f"Cannot set molarity to {molarity} - this component does not exist in the resulting Solution!"
                 )
             molarity = v[self.components.index(molarity)]
+        elif type(molarity) is list:
+            temp = 0
+            for m in molarity:
+                raise ValueError(
+                    f"Cannot set molarity to {molarity} - this component does not exist in the resulting Solution!"
+                )
+                temp += v[self.components.index(m)]
+            molarity = temp
+
         elif molarity is None:
             molarity = v.max()
 
-        v /= molarity
-        solutes = components_to_name(
-            components={c: v for c, v in zip(self.components, v) if v > 0}
-        )
+        # v *= molarity
+        solutes = {c: v for c, v in zip(self.components, v) if v > 0}
         return Solution(solutes=solutes, solvent=solvent, molarity=molarity)
 
 
@@ -540,14 +547,14 @@ def _order_components(solutions: list, components: list):
     """Order the components by their average order across the solutions. Solvents come after solutes"""
     component_rank = [[] for _ in components]
     for s in solutions:
-        for c in s.solute_dict:
-            if c in s.solutes:
-                component_rank[components.index(c)].append(s.solutes.index(c))
-        for c in s.solvent_dict:
-            if c in s.solvent:
-                component_rank[components.index(c)].append(
-                    s.solvent.index(c) + 1000
-                )  # penalize solvents so they come after solutes
+        this_solutes = list(s.solutes.keys())
+        this_solvent = list(s.solvent.keys())
+        for c in s.solutes:
+            component_rank[components.index(c)].append(this_solutes.index(c))
+        for c in s.solvent:
+            component_rank[components.index(c)].append(
+                this_solvent.index(c) + 1000
+            )  # penalize solvents so they come after solutes
     avg_component_rank = [np.mean(ranks) for ranks in component_rank]
     return [components[i] for i in np.argsort(avg_component_rank)]
 
@@ -615,20 +622,17 @@ def interpolate(solutions: list, steps: int) -> list:
     for solution_indices in itt.combinations_with_replacement(solution_idx, steps):
         svector = np.mean([solution_matrix[i] for i in solution_indices], axis=0)
         molarity = np.mean([solutions[i].molarity for i in solution_indices])
-        solutes = components_to_name(
-            {
-                c: v / molarity
-                for c, v in zip(components, svector)
-                if v > 0 and c not in solvent_components
-            }
-        )
-        solvent = components_to_name(
-            {
-                c: v
-                for c, v in zip(components, svector)
-                if v > 0 and c in solvent_components
-            }
-        )
+        solutes = {
+            c: v / molarity
+            for c, v in zip(components, svector)
+            if v > 0 and c not in solvent_components
+        }
+        solvent = {
+            c: v
+            for c, v in zip(components, svector)
+            if v > 0 and c in solvent_components
+        }
+
         new_solution = Solution(solutes=solutes, solvent=solvent, molarity=molarity)
         if new_solution not in tweened_solutions:
             tweened_solutions.append(new_solution)

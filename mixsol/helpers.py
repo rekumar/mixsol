@@ -24,7 +24,7 @@ def components_to_name(
         elif n == 1:
             composition_label += "{0}{2}".format(c, n, delimiter)
         else:
-            composition_label += "{0}{1:.7g}{2}".format(c, n, delimiter)
+            composition_label += "{0}{1:.3g}{2}".format(c, n, delimiter)
 
     return composition_label[:-1]
 

@@ -1,4 +1,4 @@
-from mixsol.helpers import name_to_components, calculate_molar_mass
+from mixsol.helpers import components_to_name, name_to_components, calculate_molar_mass
 import numpy as np
 import json
 
@@ -17,41 +17,56 @@ class Solution:
             raise ValueError(
                 "If the solution contains solutes, the molarity must be >0!"
             )
-        if solutes == "":
-            molarity = 1
 
         self.molarity = molarity
         self.alias = alias
 
-        self.solutes = solutes
-        self.solute_dict = name_to_components(
-            solutes, factor=molarity
-        )  # dictionary of molarity of each component
-        total_solute_amt = sum(self.solute_dict.values())
+        self.solutes = self.__digest_components(solutes, factor=self.molarity)
+        if len(self.solutes) == 0:
+            molarity = 1
+        else:
+            if molarity <= 0:
+                raise ValueError(
+                    "If the solution contains solutes, the molarity must be >0!"
+                )
+        total_solute_amt = sum(self.solutes.values())
         self._solute_dict_norm = {
-            k: v / total_solute_amt for k, v in self.solute_dict.items()
+            k: v / total_solute_amt for k, v in self.solutes.items()
         }  # normalize so total solute amount is 1.0. used for hashing/comparison to other Solution's
         self.__solute_str_norm = json.dumps(
             {k: round(v, 5) for k, v in self._solute_dict_norm.items()}, sort_keys=True
         )  # used for hashing
 
-        self.solvent = solvent
-        self.solvent_dict = name_to_components(solvent)
-        # self.solvent = components_to_name(self.solvent_dict, delimiter="_")
-        total_solvent_amt = sum(self.solvent_dict.values())
-        self.solvent_dict = {
-            k: v / total_solvent_amt for k, v in self.solvent_dict.items()
+        self.solvent = self.__digest_components(solvent, factor=1)
+        total_solvent_amt = sum(self.solvent.values())
+        self.solvent = {
+            k: v / total_solvent_amt for k, v in self.solvent.items()
         }  # normalize so total solvent amount is 1.0
         self.__solvent_str_norm = json.dumps(
-            {k: round(v, 5) for k, v in self.solvent_dict.items()}, sort_keys=True
+            {k: round(v, 5) for k, v in self.solvent.items()}, sort_keys=True
         )  # used for hashing
+
+    def __digest_components(self, components, factor):
+        if isinstance(components, str):
+            components = name_to_components(components, factor=factor)
+        elif isinstance(components, dict):
+            pass
+        else:
+            raise ValueError(
+                "Components must be given as an underscore-delimited string (eg Cs_Pb_I3) or dictionary (eg {'Cs':1, 'Pb':1, 'I':3'})!"
+            )
+        if len(components) != len(set(components.keys())):
+            raise ValueError(
+                "All components of solutes/solvents must be unique - did you repeat an element/molecule component?"
+            )
+        return components
 
     def __str__(self):
         if self.alias is not None:
             return self.alias
-        if self.solutes == "":  # no solutes, just a solvent
-            return f"{self.solvent}"
-        return f"{round(self.molarity,2)}M {self.solutes} in {self.solvent}"
+        if len(self.solutes) == 0:  # no solutes, just a solvent
+            return components_to_name(self.solvent)
+        return f"{self.molarity:.2g}M {components_to_name(self.solutes, factor=1/self.molarity)} in {components_to_name(self.solvent)}"
 
     def __repr__(self):
         return f"<Solution> " + str(self)
@@ -60,8 +75,8 @@ class Solution:
         if not isinstance(other, self.__class__):
             return False
         for d1, d2 in zip(
-            [self.solute_dict, self.solvent_dict],
-            [other.solute_dict, other.solvent_dict],
+            [self.solutes, self.solvent],
+            [other.solutes, other.solvent],
         ):
             if d1.keys() != d2.keys():
                 return False
@@ -82,14 +97,27 @@ class Solution:
 class Powder:
     def __init__(self, formula: str, molar_mass: float = None, alias: str = None):
         if molar_mass is None:
-            self.molar_mass = calculate_molar_mass(formula, "_")
+            self.molar_mass = calculate_molar_mass(formula, delimiter="_")
         else:
             self.molar_mass = molar_mass
-        self.formula = formula
-        self.components = name_to_components(
-            formula, factor=1 / self.molar_mass, delimiter="_"
-        )
+        self.components = self.__digest_components(formula, factor=1 / self.molar_mass)
+        self.formula = components_to_name(self.components, factor=self.molar_mass)
         self.alias = alias
+
+    def __digest_components(self, components, factor):
+        if isinstance(components, str):
+            components = name_to_components(components, factor=factor)
+        elif isinstance(components, dict):
+            pass
+        else:
+            raise ValueError(
+                "Components must be given as an underscore-delimited string (eg Cs_Pb_I3) or dictionary (eg {'Cs':1, 'Pb':1, 'I':3'})!"
+            )
+        if len(components) != len(set(components.keys())):
+            raise ValueError(
+                "All components of the formula must be unique - did you repeat an element/molecule component?"
+            )
+        return components
 
     def __str__(self):
         if self.alias is not None:
