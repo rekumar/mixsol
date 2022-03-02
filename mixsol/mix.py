@@ -40,13 +40,14 @@ class Mixer:
     ) -> bool:
         """Check if the solution_matrix spans target vector values. If not, no chance of a successful mixture here!"""
         difference = solution_matrix - target_vector
+        difference = difference.round(12)  # numerical solution has very tiny errors
         return not any([all(v > 0) or all(v < 0) for v in difference.T])
 
     def _calculate_mix(
         self,
         target: Solution,
         solution_indices: list = None,
-        tolerance: float = 1e-3,
+        tolerance: float = 1e-4,
         min_fraction: float = 0,
     ) -> list:
         """Calculate mixture of solution (solution matrix rows) that combine to achieve the target solution
@@ -62,7 +63,7 @@ class Mixer:
         if not self._is_plausible(A, b):
             return np.nan
         x, err = nnls(A.T, b, maxiter=1e3)
-        x.round(12)  # numerical solution has very tiny errors
+        x = x.round(12)  # numerical solution has very tiny errors
         if err > tolerance:
             return np.nan
         if np.logical_and(x > 0, x < min_fraction).any():
@@ -195,6 +196,8 @@ class Mixer:
         Returns:
             np.ndarray: adjacency matrix describing all volume transfers to achieve target solutions
         """
+        self.__solved = False
+
         graph = np.zeros((len(self.solutions), len(self.solutions)))
         self.availableidx = self.stock_idx.copy()
         generation = 0
@@ -202,11 +205,13 @@ class Mixer:
         n_remaining_lastiter = np.inf
         while n_remaining > 0:
             if generation > max_generations or n_remaining == n_remaining_lastiter:
-                print("Could not find a solution")
+                error_string = (
+                    "Could not find a solution for the following solutions:\n"
+                )
                 for i, s in enumerate(self.solutions):
                     if i not in self.availableidx:
-                        print(s)
-                break
+                        error_string += f"\t{s}\n"
+                raise Exception(error_string)
             n_remaining_lastiter = n_remaining
 
             for i in range(len(self.solutions)):
@@ -226,6 +231,8 @@ class Mixer:
                     self.availableidx.append(i)
                     n_remaining -= 1
             generation += 1
+
+        self.__solved = True
         return graph
 
     def solve(
@@ -297,7 +304,6 @@ class Mixer:
             this_gen = {node: transfers[node] for node in gen if node in transfers}
             if len(this_gen) > 0:
                 self.transfers_per_generation.append(this_gen)
-        self.__solved = True
 
     ### publishing methods
     def _check_if_solved(self):
@@ -604,7 +610,7 @@ def _solutions_to_matrix(solutions: list, components: list = None) -> tuple:
     return solution_matrix, solvent_idx, components
 
 
-def interpolate(solutions: list, steps: int) -> list:
+def interpolate(solutions: list, divisor: int) -> list:
     """Generate a list of solutions that are a linear interpolation between the given solutions
 
     Args:
@@ -614,12 +620,16 @@ def interpolate(solutions: list, steps: int) -> list:
     Returns:
         list: list of unique Solution objects resulting from the interpolation
     """
+    if divisor <= 0:
+        raise ValueError("Divisor must be greater than 0!")
+    if not isinstance(divisor, int):
+        raise ValueError("Divisor must be an integer!")
 
     solution_matrix, solvent_idx, components = _solutions_to_matrix(solutions)
     solvent_components = [components[i] for i in solvent_idx]
     solution_idx = list(range(len(solutions)))
     tweened_solutions = []
-    for solution_indices in itt.combinations_with_replacement(solution_idx, steps):
+    for solution_indices in itt.combinations_with_replacement(solution_idx, divisor):
         svector = np.mean([solution_matrix[i] for i in solution_indices], axis=0)
         molarity = np.mean([solutions[i].molarity for i in solution_indices])
         solutes = {
