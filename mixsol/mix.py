@@ -526,18 +526,19 @@ class Weigher:
             m = self._lookup_powder(powder)
             v += self.matrix[m] * mass / volume  # v is in units of mol/L
 
-        if type(molarity) is str:
+        if isinstance(molarity, str):
             if molarity not in self.components:
                 raise ValueError(
                     f"Cannot set molarity to {molarity} - this component does not exist in the resulting Solution!"
                 )
             molarity = v[self.components.index(molarity)]
-        elif type(molarity) is list:
+        elif isinstance(molarity, list):
             temp = 0
             for m in molarity:
-                raise ValueError(
-                    f"Cannot set molarity to {molarity} - this component does not exist in the resulting Solution!"
-                )
+                if m not in self.components:
+                    raise ValueError(
+                        f"Cannot set molarity to {molarity} - this component does not exist in the resulting Solution!"
+                    )
                 temp += v[self.components.index(m)]
             molarity = temp
 
@@ -610,11 +611,11 @@ def _solutions_to_matrix(solutions: list, components: list = None) -> tuple:
     return solution_matrix, solvent_idx, components
 
 
-def interpolate(solutions: list, divisor: int) -> list:
+def interpolate(endpoints: list, divisor: int) -> list:
     """Generate a list of solutions that are a linear interpolation between the given solutions
 
     Args:
-        solutions (list): List of Solution objects to be interpolated between
+        endpoints (list): List of Solution objects to be interpolated between
         steps (int): number of steps to interpolate between endpoint solutions. 1 will return the original list, 2 will split into 50% increments, 3 split into 33% increments, etc.
 
     Returns:
@@ -625,13 +626,13 @@ def interpolate(solutions: list, divisor: int) -> list:
     if not isinstance(divisor, int):
         raise ValueError("Divisor must be an integer!")
 
-    solution_matrix, solvent_idx, components = _solutions_to_matrix(solutions)
+    solution_matrix, solvent_idx, components = _solutions_to_matrix(endpoints)
     solvent_components = [components[i] for i in solvent_idx]
-    solution_idx = list(range(len(solutions)))
+    solution_idx = list(range(len(endpoints)))
     tweened_solutions = []
     for solution_indices in itt.combinations_with_replacement(solution_idx, divisor):
         svector = np.mean([solution_matrix[i] for i in solution_indices], axis=0)
-        molarity = np.mean([solutions[i].molarity for i in solution_indices])
+        molarity = np.mean([endpoints[i].molarity for i in solution_indices])
         solutes = {
             c: v / molarity
             for c, v in zip(components, svector)

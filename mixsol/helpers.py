@@ -98,7 +98,7 @@ def calculate_molar_mass(formula, delimiter="_") -> float:
     """Given a formula string, try to get the molar mass using the molmass package
 
     Args:
-        formula (str): chemical formula to get molar mass for
+        formula (str/dict): chemical formula to get molar mass for. Can also be a dictionary of {element:amount}
         delimiter (str, optional): delimiter character/string to remove from formula, since molmass does not expect a delimiter. Defaults to "_".
 
     Raises:
@@ -107,6 +107,16 @@ def calculate_molar_mass(formula, delimiter="_") -> float:
     Returns:
         float: molar mass (g/mol)
     """
+    if isinstance(formula, dict):
+        fstr = ""
+        for el, amt in formula.items():
+            if amt == 0:
+                continue
+            elif amt == 1:
+                fstr += f"{el}{delimiter}"
+            else:
+                fstr += f"{el}{amt}{delimiter}"
+        formula = fstr[:-1]  # remove trailing delimiter
     try:
         return Formula(formula.replace(delimiter, "")).mass
     except:
