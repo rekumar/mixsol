@@ -58,8 +58,12 @@ class Mixer:
         """
         if solution_indices is None:
             solution_indices = list(range(len(self.solutions)))
-        A = self.solution_matrix[solution_indices]
-        b = self._solution_to_vector(target)
+        A0 = self.solution_matrix[solution_indices]
+        scale = A0[A0 > 0].min()  # smallest nonzero component
+        A = (
+            A0 / scale
+        )  # change min value to 1, avoids rounding errors with trace components in Solution
+        b = self._solution_to_vector(target) / scale
         if not self._is_plausible(A, b):
             return np.nan
         x, err = nnls(A.T, b, maxiter=1e3)
