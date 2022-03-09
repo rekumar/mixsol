@@ -252,8 +252,8 @@ class Mixer:
             strategy (str, optional): strategy to select mixing inputs from the set of valid inputs.
                 "least_inputs": select mixing inputs such that the smallest input volume is maximized. this should mix with the least number of input solutions
                 "prefer_stock": select mixing inputs such that the number of non-stock inputs is minimized.
-
         """
+
         if max_inputs is None:
             max_inputs = len(self.solutions) - 1
 
@@ -268,7 +268,7 @@ class Mixer:
         g_norm = self.graph._normalize(self.graph.g)
         v_end = np.array([self.target_volumes.get(soln, 0) for soln in self.solutions])
         v_needed = self.graph.propagate_load(v_end)
-        self.initial_volumes_required = {
+        self.max_volumes_required = {
             solution: volume
             for solution, volume in zip(self.solutions, v_needed)
             if volume > 0
