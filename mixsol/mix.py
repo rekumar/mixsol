@@ -309,6 +309,86 @@ class Mixer:
             if len(this_gen) > 0:
                 self.transfers_per_generation.append(this_gen)
 
+    def __all_possible_ratios(self, num_inputs, min_fraction, steps=51):
+        def append_ratios(all_possible, min_fraction, current=None):
+            if current is None:
+                current = [[]]
+            allnext = []
+            for c in current:
+                all_available = [0] + [
+                    p for p in all_possible if p <= (1 - sum(c)) and p >= min_fraction
+                ]
+                allnext_ = []
+                for r in all_available:
+                    allnext_.append(c + [r])
+                allnext.extend(allnext_)
+            return allnext
+
+        possible_ratios = None
+        idx = 0
+        all_possible = np.linspace(0, 1, steps).round(12)
+        while idx < num_inputs:
+            possible_ratios = append_ratios(all_possible, min_fraction, possible_ratios)
+            idx += 1
+        possible_ratios = [c for c in possible_ratios if sum(c) == 1]
+        return possible_ratios
+
+    def all_possible_solutions(
+        self,
+        min_volume: float,
+        target_volume: float,
+        precision: float,
+        molarity: float,
+        max_inputs: int = 4,
+    ):
+        """Constructs a list of all Solution's that can be accessed from the set of stock solutions.
+
+        Args:
+            min_volume (float): minimum transfer volume
+            target_volume (float): final volume of accessible Solution
+            precision (float): increment of volume at which to mix stocks
+            molarity (float): molarity of accessible Solution. Just for naming purposes, the actual Solutions will be equivalent regardless of molarity value.
+            max_inputs (int, optional): Max number of stock solutinos that can be mixed. This may be overridden if min_volume/total_volume limits the number of inputs. Defaults to 4.
+
+        Returns:
+            list: list of accessible Solution's
+        """
+        max_inputs = min(
+            max_inputs, int(np.floor(target_volume / min_volume))
+        )  # possible that we are limited by volumes vs user guidance
+
+        ratios = self.__all_possible_ratios(
+            num_inputs=max_inputs,
+            min_fraction=min_volume / target_volume,
+            steps=int(target_volume / precision),
+        )
+
+        solution_vectors = []
+        for s in itt.combinations(self.solution_matrix, max_inputs):
+            for r in ratios:
+                row = np.array(s).T @ r
+                solution_vectors.append(row)
+        solution_vectors = np.array(solution_vectors).round(12)
+        solution_vectors = np.unique(solution_vectors, axis=0)
+
+        solutions = []
+        for r in solution_vectors:
+            solutes = {
+                c: amt
+                for idx, (c, amt) in enumerate(zip(self.components, r))
+                if idx not in self.solvent_idx
+            }
+            solvents = {
+                c: amt
+                for idx, (c, amt) in enumerate(zip(self.components, r))
+                if idx in self.solvent_idx
+            }
+            solutions.append(
+                Solution(solutes=solutes, solvent=solvents, molarity=molarity)
+            )
+
+        return solutions
+
     ### publishing methods
     def _check_if_solved(self):
         if not self.__solved:
