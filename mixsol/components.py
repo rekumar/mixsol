@@ -50,7 +50,7 @@ class Solution:
         if isinstance(components, str):
             components = name_to_components(components, factor=factor)
         elif isinstance(components, dict):
-            pass
+            components = {k: v * factor for k, v in components.items()}
         else:
             raise ValueError(
                 "Components must be given as an underscore-delimited string (eg Cs_Pb_I3) or dictionary (eg {'Cs':1, 'Pb':1, 'I':3'})!"
@@ -81,7 +81,10 @@ class Solution:
             if d1.keys() != d2.keys():
                 return False
             for k in d1.keys():
-                if (
+                if d2[k] == 0:  # catch for divide by zero issue
+                    if d1[k] != 0:
+                        return False
+                elif (
                     np.abs(1 - (d1[k] / d2[k])) > 0.0001
                 ):  # tolerance to accomodate rounding errors
                     return False

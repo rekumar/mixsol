@@ -80,8 +80,8 @@ def name_to_components(
             components[comp] += amt
         else:
             components[comp] = amt
-
     parenthesized = re.findall("\((.*)\)(\D*[+-]?[0-9]*[.]?[0-9]+)", name_)
+    # parenthesized = re.findall("\(([^\)]*)\)(\D*[0-9]*[.]?[0-9]+)", name_)
     for group, group_factor in parenthesized:
         components = name_to_components(
             name=group,
