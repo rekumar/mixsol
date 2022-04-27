@@ -1,3 +1,6 @@
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/rekumar/mixsol/HEAD)
+[![PyPI version](https://badge.fury.io/py/mixsol.svg)](https://badge.fury.io/py/mixsol)
+
 ![MixSol](/docs/mixsol.svg)
 
 `pip install mixsol`
