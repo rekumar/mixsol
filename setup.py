@@ -3,7 +3,7 @@ from distutils.core import setup
 setup(
     name="mixsol",
     packages=["mixsol"],
-    version="0.7.1",
+    version="0.7.2",
     license="GPLv3",
     description="Planning tool for combinatorial solution mixing. Reach target solutions from mixes of starting solutions, constrained by minimum pipetting volumes. Also aids in computing amounts of powdered reagents required to form solutions with target solutes + molarities.",
     author="Rishi E Kumar",
