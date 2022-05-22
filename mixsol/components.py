@@ -59,6 +59,7 @@ class Solution:
             raise ValueError(
                 "All components of solutes/solvents must be unique - did you repeat an element/molecule component?"
             )
+        components = {k: round(v, 12) for k, v in components.items()}
         return components
 
     def __str__(self):
