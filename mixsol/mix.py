@@ -106,7 +106,7 @@ class Mixer:
                 target_matrix[m] = target.solvent[c] * volume
         return target_matrix.T
 
-    def mix(
+    def _mix_to_vector(
         self,
         target: Solution,
         volume: float,
@@ -146,7 +146,7 @@ class Mixer:
 
         possible_mixtures = []
         if max_inputs is None:
-            max_inputs = len(solution_indices) - 1
+            max_inputs = len(solution_indices)
         max_inputs = min(
             volume // min_volume, max_inputs
         )  # min pipette volume may limit us to fewer inputs
@@ -232,7 +232,7 @@ class Mixer:
             for i in range(len(self.solutions)):
                 if i in self.availableidx:
                     continue
-                x = self.mix(
+                x = self._mix_to_vector(
                     target=self.solutions[i],
                     volume=self.target_volumes[self.solutions[i]],
                     solution_indices=self.availableidx,
@@ -249,6 +249,64 @@ class Mixer:
 
         self.__solved = True
         return graph
+
+    def mix(
+        self,
+        target: Solution,
+        volume: float,
+        solutions_to_use: list = "stock",
+        tolerance: float = 1e-5,
+        min_volume: float = 0,
+        verbose: bool = False,
+        max_inputs: int = None,
+        strategy: str = "least_inputs",
+    ) -> dict:
+        """Calculate mixture of stock solutions to achieve target solution
+
+        Args:
+            target (Solution): target solution
+            volume (float): volume of target solution desired
+            solutions_to_use (str, optional): "stock" or "all" to use stock solutions or all (stocks + targets) solutions as potential inputs for the mixture. Defaults to "stock".
+            tolerance (float, optional): error threhold for target solution. Defaults to 1e-2.
+            min_volume (float, optional): minimum volume that can be mixed from any single solution (useful for pipettes with a minimum aspiration volume). Defaults to 0.
+            verbose (bool, optional): if True, returns all plausible mixture vectors. If False (default), only returns the best (largest minimum single volume transfer) vector.
+            max_inputs (int, optional): maximum number of solutions to mix into the given target. Defaults to None (no limit).
+            strategy (str, optional): strategy to select mixing inputs from the set of valid inputs.
+                "least_inputs": select mixing inputs such that the smallest input volume is maximized. this should mix with the least number of input solutions
+                "prefer_stock": select mixing inputs such that the number of non-stock inputs is minimized.
+
+        Returns:
+            np.ndarray: vector of solution volumes corresponding to rows in the solution matrix (self.solutions). If verbose=True, this will be a list of such vectors that all reach the target solution
+        """
+        if strategy not in ["least_inputs", "prefer_stock", "fastest"]:
+            raise ValueError(
+                "Mixing strategy must be 'least_inputs', 'prefer_stock', or 'fastest'"
+            )
+        if solutions_to_use == "stock":
+            solution_indices = self.stock_idx
+        elif solutions_to_use == "all":
+            solution_indices = list(range(len(self.solutions)))
+        else:
+            raise ValueError("solutions_to_use must be 'stock' or 'all'")
+
+        volume_vector = self._mix_to_vector(
+            target=target,
+            volume=volume,
+            tolerance=tolerance,
+            min_volume=min_volume,
+            solution_indices=solution_indices,
+            verbose=verbose,
+            strategy=strategy,
+            max_inputs=max_inputs,
+        )
+        if volume_vector is np.nan:
+            raise Exception(f"Could not find a valid set of volume transfers to reach the target solution {target}!")
+        volumes_dict = {
+            self.solutions[i]: volume
+            for i, volume in enumerate(volume_vector)
+            if volume > 0
+        }
+        return volumes_dict
 
     def solve(
         self,
