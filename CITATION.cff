@@ -1,0 +1,13 @@
+abstract: "A software tool to plan volume transfers for liquid handlers."
+authors:
+- affiliation: UC San Diego
+  family-names: Rishi E Kumar
+cff-version: 1.2.0
+date-released: '2024-01-29'
+doi: 10.5281/zenodo.10581827
+license:
+- cc-by-4.0
+repository-code: https://github.com/rekumar/mixsol/tree/v0.5.1
+title: 'rekumar/mixsol: Release for Zenodo Citation'
+type: software
+version: v0.5.1
