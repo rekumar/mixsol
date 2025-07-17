@@ -1,38 +1,40 @@
+from typing import Literal
 import numpy as np
-from scipy.optimize import nnls
-from mixsol.components import Solution, Powder
-from mixsol.helpers import name_to_components, components_to_name, calculate_molar_mass
+from mixsol.components import Solution
 from mixsol.digraph import DirectedGraph
 import itertools as itt
 import matplotlib.pyplot as plt
 from random import sample
+from scipy.optimize import nnls
 
 
 class Mixer:
     """class to calculate mixing paths from a set of stock solutions -> set of target solutions"""
 
-    def __init__(self, stock_solutions: list, targets: dict = None):
+    def __init__(
+        self, stock_solutions: list[Solution], targets: dict[Solution, float] = None
+    ):
         """Initialize the stock solutions + target solutions
 
         Args:
             stock_solutions (list): list of Solution objects defining starting solutions
-            targets (dict, optional): dictionary of {Solution:volume} that define target solutions and volumes of each. Defaults to None.
+            targets (dict, optional): dictionary of {Solution:volume} that define target solutions and volumes of each. Defaults to None -> empty dict.
         """
         if targets is None:
             targets = {}
 
         self.target_solutions = list(targets.keys())
-        self.solutions = list(set(stock_solutions + self.target_solutions))
+        self.all_solutions = list(set(stock_solutions + self.target_solutions))
         self.target_volumes = {
-            solution: targets.get(solution, 0) for solution in self.solutions
+            solution: targets.get(solution, 0) for solution in self.all_solutions
         }
         (
             self.solution_matrix,
-            self.solvent_idx,
+            self.solvents_idx,
             self.components,
-        ) = _solutions_to_matrix(self.solutions)
+        ) = _solutions_to_matrix(self.all_solutions)
         self.stock_idx = [
-            self.solutions.index(stock) for stock in stock_solutions
+            self.all_solutions.index(stock) for stock in stock_solutions
         ]  # rows of solution matrix that belong to stock solutions
         self.__solved = False
 
@@ -58,7 +60,7 @@ class Mixer:
             list: list of float values defining the volume of each solution to mix to form target
         """
         if solution_indices is None:
-            solution_indices = list(range(len(self.solutions)))
+            solution_indices = list(range(len(self.all_solutions)))
         A0 = self.solution_matrix[solution_indices]
         scale = A0[A0 > 0].min()  # smallest nonzero component
         A = (
@@ -67,14 +69,14 @@ class Mixer:
         b = self._solution_to_vector(target) / scale
         if not self._is_plausible(A, b):
             return np.nan
-        x, err = nnls(A.T, b, maxiter=1e3)
+        x, err = nnls(A.T, b, maxiter=int(1e3))
         x = x.round(12)  # numerical solution has very tiny errors
         if err > tolerance:
             return np.nan
         if np.logical_and(x > 0, x < min_fraction).any():
             return np.nan
 
-        x_full = np.zeros((len(self.solutions),))
+        x_full = np.zeros((len(self.all_solutions),))
         for idx, x_ in zip(solution_indices, x):
             x_full[idx] = x_
         return x_full
@@ -102,8 +104,8 @@ class Mixer:
         for m, c in enumerate(components):
             if c in target.solutes:
                 target_matrix[m] = target.solutes[c] * volume
-            elif c in target.solvent:
-                target_matrix[m] = target.solvent[c] * volume
+            elif c in target.solvents:
+                target_matrix[m] = target.solvents[c] * volume
         return target_matrix.T
 
     def _mix_to_vector(
@@ -115,7 +117,7 @@ class Mixer:
         min_volume: float = 0,
         verbose: bool = False,
         max_inputs: int = None,
-        strategy: str = "least_inputs",
+        strategy: Literal["least_inputs", "prefer_stock", "fastest"] = "least_inputs",
     ) -> np.ndarray:
         """Calculate mixture of stock solutions to achieve target solution
 
@@ -130,6 +132,7 @@ class Mixer:
             strategy (str, optional): strategy to select mixing inputs from the set of valid inputs.
                 "least_inputs": select mixing inputs such that the smallest input volume is maximized. this should mix with the least number of input solutions
                 "prefer_stock": select mixing inputs such that the number of non-stock inputs is minimized.
+                "fastest": greedy optimizer always accepts the first valid mixing strategy. Shortest compute time, will not always find the optimal strategy.
 
         Returns:
             np.ndarray: vector of solution volumes corresponding to rows in the solution matrix (self.solutions). If verbose=True, this will be a list of such vectors that all reach the target solution
@@ -142,16 +145,17 @@ class Mixer:
         if solution_indices is None or solution_indices == "stock":
             solution_indices = self.stock_idx
         elif solution_indices == "all":
-            solution_indices = list(range(len(self.solutions)))
+            solution_indices = list(range(len(self.all_solutions)))
 
         possible_mixtures = []
         if max_inputs is None:
             max_inputs = len(solution_indices)
-        max_inputs = min(
-            volume // min_volume, max_inputs
-        )  # min pipette volume may limit us to fewer inputs
+        if min_volume > 0:
+            max_inputs = min(
+                volume // min_volume, max_inputs
+            )  # min pipette volume may limit us to fewer inputs
 
-        for i in range(1, max_inputs):
+        for i in range(1, max_inputs + 1):
             for idx in itt.combinations(
                 sample(solution_indices, len(solution_indices)), i
             ):
@@ -179,7 +183,7 @@ class Mixer:
             )  # sort such that the mixture with the largest minimum fraction is first
         elif strategy == "prefer_stock":
             nonstock_idx = [
-                i for i in range(len(self.solutions)) if i not in self.stock_idx
+                i for i in range(len(self.all_solutions)) if i not in self.stock_idx
             ]
             possible_mixtures.sort(
                 key=lambda x: (np.sum(x[nonstock_idx] > 0).sum(), -min(x[x > 0]))
@@ -213,28 +217,28 @@ class Mixer:
         """
         self.__solved = False
 
-        graph = np.zeros((len(self.solutions), len(self.solutions)))
+        graph = np.zeros((len(self.all_solutions), len(self.all_solutions)))
         self.availableidx = self.stock_idx.copy()
         generation = 0
-        n_remaining = len(self.solutions) - len(self.availableidx)
+        n_remaining = len(self.all_solutions) - len(self.availableidx)
         n_remaining_lastiter = np.inf
         while n_remaining > 0:
             if generation > max_generations or n_remaining == n_remaining_lastiter:
                 error_string = (
                     "Could not find a solution for the following solutions:\n"
                 )
-                for i, s in enumerate(self.solutions):
+                for i, s in enumerate(self.all_solutions):
                     if i not in self.availableidx:
                         error_string += f"\t{s}\n"
                 raise Exception(error_string)
             n_remaining_lastiter = n_remaining
 
-            for i in range(len(self.solutions)):
+            for i in range(len(self.all_solutions)):
                 if i in self.availableidx:
                     continue
                 x = self._mix_to_vector(
-                    target=self.solutions[i],
-                    volume=self.target_volumes[self.solutions[i]],
+                    target=self.all_solutions[i],
+                    volume=self.target_volumes[self.all_solutions[i]],
                     solution_indices=self.availableidx,
                     min_volume=min_volume,
                     max_inputs=max_inputs,
@@ -254,12 +258,12 @@ class Mixer:
         self,
         target: Solution,
         volume: float,
-        solutions_to_use: list = "stock",
+        solutions_to_use: Literal["stock", "all"] = "stock",
         tolerance: float = 1e-5,
         min_volume: float = 0,
         verbose: bool = False,
         max_inputs: int = None,
-        strategy: str = "least_inputs",
+        strategy: Literal["least_inputs", "prefer_stock", "fastest"] = "least_inputs",
     ) -> dict:
         """Calculate mixture of stock solutions to achieve target solution
 
@@ -285,7 +289,7 @@ class Mixer:
         if solutions_to_use == "stock":
             solution_indices = self.stock_idx
         elif solutions_to_use == "all":
-            solution_indices = list(range(len(self.solutions)))
+            solution_indices = list(range(len(self.all_solutions)))
         else:
             raise ValueError("solutions_to_use must be 'stock' or 'all'")
 
@@ -300,9 +304,11 @@ class Mixer:
             max_inputs=max_inputs,
         )
         if volume_vector is np.nan:
-            raise Exception(f"Could not find a valid set of volume transfers to reach the target solution {target}!")
+            raise Exception(
+                f"Could not find a valid set of volume transfers to reach the target solution {target}!"
+            )
         volumes_dict = {
-            self.solutions[i]: volume
+            self.all_solutions[i]: volume
             for i, volume in enumerate(volume_vector)
             if volume > 0
         }
@@ -328,7 +334,7 @@ class Mixer:
 
         """
         if max_inputs is None:
-            max_inputs = len(self.solutions) - 1
+            max_inputs = len(self.all_solutions) - 1
 
         adjacency_matrix = self._solve_adjacency_matrix(
             min_volume=min_volume,
@@ -339,11 +345,13 @@ class Mixer:
         )
         self.graph = DirectedGraph(adjacency_matrix)
         g_norm = self.graph._normalize(self.graph.g)
-        v_end = np.array([self.target_volumes.get(soln, 0) for soln in self.solutions])
+        v_end = np.array(
+            [self.target_volumes.get(soln, 0) for soln in self.all_solutions]
+        )
         v_needed = self.graph.propagate_load(v_end)
         self.initial_volumes_required = {
             solution: volume
-            for solution, volume in zip(self.solutions, v_needed)
+            for solution, volume in zip(self.all_solutions, v_needed)
             if volume > 0
         }
         self.mixing_order = []
@@ -352,13 +360,13 @@ class Mixer:
             for solution_index in generation:
                 this_mix = {}
                 for input_solution, input_fraction in zip(
-                    self.solutions, g_norm[solution_index]
+                    self.all_solutions, g_norm[solution_index]
                 ):
                     if input_fraction > 0:
                         this_mix[input_solution] = (
                             v_needed[solution_index] * input_fraction
                         )
-                mixes_in_this_gen[self.solutions[solution_index]] = this_mix
+                mixes_in_this_gen[self.all_solutions[solution_index]] = this_mix
             self.mixing_order.append(mixes_in_this_gen)
 
         transfers = {}
@@ -391,7 +399,7 @@ class Mixer:
             min_volume (float): minimum transfer volume
             target_volume (float): final volume of accessible Solution
             precision (float): increment of volume at which to mix stocks
-            max_inputs (int, optional): Max number of stock solutinos that can be mixed. This may be overridden if min_volume/total_volume limits the number of inputs. Defaults to 4.
+            max_inputs (int, optional): Max number of stock solutions that can be mixed. This may be overridden if min_volume/total_volume limits the number of inputs, or if there are fewer stock solutions than max_inputs. Defaults to 4.
 
         Returns:
             list: list of accessible Solution's
@@ -399,6 +407,9 @@ class Mixer:
         max_inputs = min(
             max_inputs, int(np.floor(target_volume / min_volume))
         )  # possible that we are limited by volumes vs user guidance
+        max_inputs = min(
+            max_inputs, len(self.stock_idx)
+        )  # cant have more inputs than options.
 
         # ratios = self.__all_possible_ratios(
         #     num_inputs=max_inputs,
@@ -426,14 +437,14 @@ class Mixer:
             solutes = {
                 c: amt
                 for idx, (c, amt) in enumerate(zip(self.components, r))
-                if idx not in self.solvent_idx
+                if idx not in self.solvents_idx
             }
             solvents = {
                 c: amt
                 for idx, (c, amt) in enumerate(zip(self.components, r))
-                if idx in self.solvent_idx
+                if idx in self.solvents_idx
             }
-            solutions.append(Solution(solutes=solutes, solvent=solvents, molarity=1))
+            solutions.append(Solution(solutes=solutes, solvents=solvents, molarity=1))
 
         return solutions
 
@@ -457,7 +468,7 @@ class Mixer:
                 if not any([source != destination for destination in transfers]):
                     continue
                 if first:
-                    print(f"====== Mixing =====")
+                    print("====== Mixing =====")
                     first = False
                 print(f"Distribute {source}:")
                 for destination, volume in transfers.items():
@@ -594,9 +605,7 @@ class Weigher:
         Returns:
             list: row indices of powders that are valid options for the target solution
         """
-        idx_unusable = (
-            set()
-        )  # indices for which powders contain components that are not present in the target
+        idx_unusable = set()  # indices for which powders contain components that are not present in the target
         for component_idx in np.where(target == 0)[0]:
             present_in_powder = np.where(self.matrix[:, component_idx] > 0)[0]
             for powder_idx in present_in_powder:
@@ -682,7 +691,7 @@ class Weigher:
 
         # v *= molarity
         solutes = {c: v for c, v in zip(self.components, v) if v > 0}
-        return Solution(solutes=solutes, solvent=solvent, molarity=molarity)
+        return Solution(solutes=solutes, solvents=solvent, molarity=molarity)
 
 
 def _order_components(solutions: list, components: list):
@@ -690,10 +699,10 @@ def _order_components(solutions: list, components: list):
     component_rank = [[] for _ in components]
     for s in solutions:
         this_solutes = list(s.solutes.keys())
-        this_solvent = list(s.solvent.keys())
+        this_solvent = list(s.solvents.keys())
         for c in s.solutes:
             component_rank[components.index(c)].append(this_solutes.index(c))
-        for c in s.solvent:
+        for c in s.solvents:
             component_rank[components.index(c)].append(
                 this_solvent.index(c) + 1000
             )  # penalize solvents so they come after solutes
@@ -722,7 +731,7 @@ def _solutions_to_matrix(solutions: list, components: list = None) -> tuple:
     if components is None:
         components = set()
         for s in solutions:
-            components.update(s.solutes.keys(), s.solvent.keys())
+            components.update(s.solutes.keys(), s.solvents.keys())
         components = list(
             components
         )  # sets are not order-preserving, lists are - just safer this way
@@ -738,8 +747,8 @@ def _solutions_to_matrix(solutions: list, components: list = None) -> tuple:
         for n, c in enumerate(components):
             if c in s.solutes:
                 solution_matrix[m, n] = s.solutes[c]
-            elif c in s.solvent:
-                solution_matrix[m, n] = s.solvent[c]
+            elif c in s.solvents:
+                solution_matrix[m, n] = s.solvents[c]
                 solvent_idx.add(n)
     solvent_idx = list(solvent_idx)
 
@@ -779,7 +788,7 @@ def interpolate(endpoints: list, divisor: int) -> list:
             if v > 0 and c in solvent_components
         }
 
-        new_solution = Solution(solutes=solutes, solvent=solvent, molarity=molarity)
+        new_solution = Solution(solutes=solutes, solvents=solvent, molarity=molarity)
         if new_solution not in tweened_solutions:
             tweened_solutions.append(new_solution)
 

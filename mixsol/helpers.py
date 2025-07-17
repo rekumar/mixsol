@@ -1,6 +1,6 @@
-import numpy as np
 from molmass import Formula
 import re
+
 
 ## parsing formulae -> dictionaries
 def components_to_name(
@@ -22,7 +22,7 @@ def components_to_name(
         if n == 0:
             continue
         elif n == 1:
-            composition_label += "{0}{2}".format(c, n, delimiter)
+            composition_label += "{0}{1}".format(c, delimiter)
         else:
             composition_label += "{0}{1:.3g}{2}".format(c, n, delimiter)
 
@@ -37,7 +37,11 @@ def __digest_string(s, factor=1, delimiter="_"):
         if "(" in species:
             parenthesized += 1
         if parenthesized == 0:
-            components[species] = float(amount) * factor
+            amt = float(amount) * factor
+            if species in components:
+                components[species] += amt
+            else:
+                components[species] = amt
         if ")" in species:
             parenthesized -= 1
     return components
@@ -119,7 +123,7 @@ def calculate_molar_mass(formula, delimiter="_") -> float:
         formula = fstr[:-1]  # remove trailing delimiter
     try:
         return Formula(formula.replace(delimiter, "")).mass
-    except:
+    except Exception:
         raise ValueError(
             f"Could not guess the molar mass for formula {formula}. Maybe there are non-elemental formula units?\n Either replace all formula units with elemental components, or manually input using the molar_mass argument."
         )
