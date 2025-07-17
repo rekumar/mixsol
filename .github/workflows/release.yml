@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'pyproject.toml'
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version-changed: ${{ steps.version-check.outputs.changed }}
+      new-version: ${{ steps.version-check.outputs.version }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Check if version changed
+      id: version-check
+      run: |
+        # Get current version from pyproject.toml
+        CURRENT_VERSION=$(grep -E '^version = ' pyproject.toml | sed 's/version = "//' | sed 's/"//')
+        echo "current-version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+        
+        # Check if pyproject.toml was changed in this push
+        if git diff --name-only HEAD~1 HEAD | grep -q "pyproject.toml"; then
+          # Get previous version
+          PREVIOUS_VERSION=$(git show HEAD~1:pyproject.toml | grep -E '^version = ' | sed 's/version = "//' | sed 's/"//' || echo "")
+          
+          if [ "$CURRENT_VERSION" != "$PREVIOUS_VERSION" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+            echo "Version changed from $PREVIOUS_VERSION to $CURRENT_VERSION"
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "Version unchanged: $CURRENT_VERSION"
+          fi
+        else
+          echo "changed=false" >> $GITHUB_OUTPUT
+          echo "pyproject.toml not changed"
+        fi
+
+  release:
+    needs: check-version
+    if: needs.check-version.outputs.version-changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+      with:
+        version: "latest"
+    
+    - name: Set up Python
+      run: uv python install 3.11
+    
+    - name: Install dependencies
+      run: |
+        uv sync --dev
+        uv add --dev build twine
+    
+    - name: Run tests
+      run: |
+        uv run pytest --cov=mixsol
+    
+    - name: Build package
+      run: |
+        uv run python -m build
+    
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ needs.check-version.outputs.new-version }}
+        release_name: Release v${{ needs.check-version.outputs.new-version }}
+        draft: false
+        prerelease: false
+    
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1

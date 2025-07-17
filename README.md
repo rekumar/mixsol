@@ -17,7 +17,7 @@ Happy mixing!
 # Examples
 
 ## Solution Mixing
-Solutions are defined with the `Solution` class. Solutes and solvents are both defined by their formula, which follows the `(name1)(amount1)_(name2)(amount2)_..._(name)(amount)` format. The names do not have to correspond to elements, so you can use placeholders for units that will be mixed. Parentheses can be used to simplify formulae as well: `A2_B2_C` == `(A_B)2_C`. An `alias` can be provided for the solution to simplify later analysis.
+Solutions are defined with the `Solution` class. Solutes and solvents are both defined by either dicts or their formula, which follows the `(name1)(amount1)_(name2)(amount2)_..._(name)(amount)` format. The names do not have to correspond to elements, so you can use placeholders for units that will be mixed. Parentheses can be used to simplify formulae as well: `A2_B2_C` == `(A_B)2_C`. An `alias` can be provided for the solution to simplify later analysis.
 
 ```
 import mixsol as mx
@@ -25,13 +25,20 @@ import mixsol as mx
 stock_solutions = [
     mx.Solution(
         solutes='FA_Pb_I3',
-        solvent='DMF9_DMSO1',
+        solvents='DMF9_DMSO1',
         molarity=1,
         alias='FAPI'
     ),
     mx.Solution(
-        solutes='MA_Pb_I3',
-        solvent='DMF9_DMSO1',
+        solutes={
+            "MA": 1,
+            "Pb": 1,
+            "I": 3,
+        },
+        solvents={
+            "DMF": 9,
+            "DMSO": 1,
+        },
         molarity=1,
         alias='MAPI'
     ),
@@ -46,8 +53,13 @@ You can manually generate your target solutions and place them in a list like so
 targets = []
 for a in np.linspace(0, 0.8, 5):
     targets.append(mx.Solution(
-        solutes=f"FA{a:0.3f}_MA{1-a:.3f}_Pb_I3",
-        solvent="DMF9_DMSO1",
+        solutes={
+            "FA": a,
+            "MA": 1-a,
+            "Pb": 1,
+            "I": 3,
+        },
+        solvents="DMF9_DMSO1",
         molarity=1,
         alias=f'FA_{a:.3f}'
     ))
@@ -153,7 +165,7 @@ which can then be used to determine powder amounts for a given volume of a targe
 ```
 target=Solution(
     solutes='Cs0.05_FA0.8_MA0.15_Pb_I2.4_Br0.45_Cl0.15',
-    solvent='DMF9_DMSO1',
+    solvents='DMF9_DMSO1',
     molarity=1
 )
 
@@ -172,7 +184,7 @@ Finally, we can also generate a `Solution` object by inputting a `{powder:mass}`
 result = weigher.weights_to_solution(
     weights=answer,
     volume=1e-3,
-    solvent='DMF9_DMSO1',
+    solvents='DMF9_DMSO1',
 )
 print(result)
 ```
@@ -185,7 +197,7 @@ The molarity of the output will by default be determined by the largest componen
 result2 = weigher.weights_to_solution(
     weights=answer,
     volume=1e-3, #in L
-    solvent='DMF9_DMSO1',
+    solvents='DMF9_DMSO1',
     norm='Pb', #normalize the formula+molarity such that Pb=1
 )
 print(result2) #result is a Solution object

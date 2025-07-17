@@ -6,22 +6,24 @@ import json
 class Solution:
     def __init__(
         self,
-        solutes: str = "",
-        solvent: str = None,
+        solutes: str | dict[str, float] = None,
+        solvents: str | dict[str, float] = None,
         molarity: float = 0,
         alias: str = None,
     ):
-        if solvent is None:
+        if not solutes:
+            solutes = {}
+        if not solvents:
             raise ValueError("Must define a solvent!")
-        if solutes != "" and molarity == 0:
+        if solutes and molarity <= 0:
             raise ValueError(
                 "If the solution contains solutes, the molarity must be >0!"
             )
 
-        self.molarity = molarity
+        self.__molarity = molarity
         self.alias = alias
 
-        self.solutes = self.__digest_components(solutes, factor=self.molarity)
+        self.__solutes = self.__digest_components(solutes, factor=self.molarity)
         if len(self.solutes) == 0:
             molarity = 1
         else:
@@ -37,20 +39,32 @@ class Solution:
             {k: round(v, 5) for k, v in self._solute_dict_norm.items()}, sort_keys=True
         )  # used for hashing
 
-        self.solvent = self.__digest_components(solvent, factor=1)
-        total_solvent_amt = sum(self.solvent.values())
-        self.solvent = {
-            k: v / total_solvent_amt for k, v in self.solvent.items()
+        self.__solvents = self.__digest_components(solvents, factor=1)
+        total_solvent_amt = sum(self.__solvents.values())
+        self.__solvents = {
+            k: v / total_solvent_amt for k, v in self.__solvents.items()
         }  # normalize so total solvent amount is 1.0
         self.__solvent_str_norm = json.dumps(
-            {k: round(v, 5) for k, v in self.solvent.items()}, sort_keys=True
+            {k: round(v, 5) for k, v in self.solvents.items()}, sort_keys=True
         )  # used for hashing
+
+    @property
+    def solutes(self):
+        return self.__solutes
+
+    @property
+    def solvents(self):
+        return self.__solvents
+
+    @property
+    def molarity(self):
+        return self.__molarity
 
     def __digest_components(self, components, factor):
         if isinstance(components, str):
             components = name_to_components(components, factor=factor)
         elif isinstance(components, dict):
-            components = {k: v * factor for k, v in components.items()}
+            components = {k: float(v * factor) for k, v in components.items()}
         else:
             raise ValueError(
                 "Components must be given as an underscore-delimited string (eg Cs_Pb_I3) or dictionary (eg {'Cs':1, 'Pb':1, 'I':3'})!"
@@ -66,18 +80,18 @@ class Solution:
         if self.alias is not None:
             return self.alias
         if len(self.solutes) == 0:  # no solutes, just a solvent
-            return components_to_name(self.solvent)
-        return f"{self.molarity:.2g}M {components_to_name(self.solutes, factor=1/self.molarity)} in {components_to_name(self.solvent)}"
+            return components_to_name(self.solvents)
+        return f"{self.molarity:.2g}M {components_to_name(self.solutes, factor=1 / self.molarity)} in {components_to_name(self.solvents)}"
 
     def __repr__(self):
-        return f"<Solution> " + str(self)
+        return "<Solution> " + str(self)
 
     def __eq__(self, other):
         if not isinstance(other, self.__class__):
             return False
         for d1, d2 in zip(
-            [self.solutes, self.solvent],
-            [other.solutes, other.solvent],
+            [self.solutes, self.solvents],
+            [other.solutes, other.solvents],
         ):
             if d1.keys() != d2.keys():
                 return False
@@ -130,7 +144,7 @@ class Powder:
             return self.formula
 
     def __repr__(self):
-        return f"<Powder>" + str(self)
+        return "<Powder>" + str(self)
 
     def __eq__(self, other):
         if isinstance(other, self.__class__):
