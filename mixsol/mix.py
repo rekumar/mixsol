@@ -218,28 +218,30 @@ class Mixer:
         self.__solved = False
 
         graph = np.zeros((len(self.all_solutions), len(self.all_solutions)))
-        self.availableidx = self.stock_idx.copy()
+        available_idx = self.stock_idx.copy()
         generation = 0
-        n_remaining = len(self.all_solutions) - len(self.availableidx)
+        n_remaining = len(self.all_solutions) - len(available_idx)
         n_remaining_lastiter = np.inf
+
         while n_remaining > 0:
             if generation > max_generations or n_remaining == n_remaining_lastiter:
                 error_string = (
                     "Could not find a solution for the following solutions:\n"
                 )
                 for i, s in enumerate(self.all_solutions):
-                    if i not in self.availableidx:
+                    if i not in available_idx:
                         error_string += f"\t{s}\n"
                 raise Exception(error_string)
             n_remaining_lastiter = n_remaining
 
+            newly_available_idx_this_round = []
             for i in range(len(self.all_solutions)):
-                if i in self.availableidx:
+                if i in available_idx:
                     continue
                 x = self._mix_to_vector(
                     target=self.all_solutions[i],
                     volume=self.target_volumes[self.all_solutions[i]],
-                    solution_indices=self.availableidx,
+                    solution_indices=available_idx,
                     min_volume=min_volume,
                     max_inputs=max_inputs,
                     tolerance=tolerance,
@@ -247,9 +249,10 @@ class Mixer:
                 )
                 if not np.isnan(x).any():
                     graph[i, :] = x
-                    self.availableidx.append(i)
+                    newly_available_idx_this_round.append(i)
                     n_remaining -= 1
             generation += 1
+            available_idx.extend(newly_available_idx_this_round)
 
         self.__solved = True
         return graph

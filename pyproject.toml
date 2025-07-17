@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mixsol"
-version = "1.0.0"
+version = "1.0.1"
 description = "Planning tool for combinatorial solution mixing. Reach target solutions from mixes of starting solutions, constrained by minimum pipetting volumes. Also aids in computing amounts of powdered reagents required to form solutions with target solutes + molarities."
 license = {text = "GPLv3"}
 authors = [
